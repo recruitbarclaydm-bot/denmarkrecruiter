@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { useToast } from '@/context/ToastContext';
@@ -190,17 +189,6 @@ export default function CandidateLoginPage() {
                 </div>
               </div>
             )}
-          </div>
-
-          {/* Discreet Caseworker Gateway Link */}
-          <div className="mt-5 text-center">
-            <Link
-              href="/admin/login"
-              className="text-[11px] text-slate-400 hover:text-brand-primary dark:hover:text-emerald-400 transition-colors inline-flex items-center gap-1"
-            >
-              <span>Authorized Caseworker Gateway</span>
-              <span>&rarr;</span>
-            </Link>
           </div>
         </div>
       </main>
