@@ -50,7 +50,7 @@ export default function AdminPage() {
   // Admin Guard
   useEffect(() => {
     if (!user || user.role !== 'admin') {
-      router.push('/');
+      router.push('/admin/login');
     }
   }, [user, router]);
 

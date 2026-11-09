@@ -2,14 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { useToast } from '@/context/ToastContext';
-import { MOCK_ADMIN_USER, MOCK_ADMIN_PASSWORD } from '@/data/mockUsers';
 import { Header } from '@/components/shared/Header';
-import { Lock, Mail, ChevronDown, ChevronUp, ArrowRight, Shield, User, Sparkles } from 'lucide-react';
+import { Lock, Mail, ChevronDown, ChevronUp, ArrowRight, User, Sparkles } from 'lucide-react';
 
-export default function LoginPage() {
+export default function CandidateLoginPage() {
   const router = useRouter();
   const { user, login } = useAuth();
   const { t } = useLanguage();
@@ -20,8 +20,9 @@ export default function LoginPage() {
   const [showDemo, setShowDemo] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [shake, setShake] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  // If already logged in, redirect
+  // If already logged in
   useEffect(() => {
     if (user) {
       if (user.role === 'admin') {
@@ -34,6 +35,7 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage('');
     if (!email || !password) {
       showToast('Please fill in both email and password.', 'error');
       setShake(true);
@@ -42,44 +44,32 @@ export default function LoginPage() {
     }
 
     setIsLoading(true);
-    const res = await login(email, password);
+    // Explicitly restrict this public form to candidates only
+    const res = await login(email, password, 'candidate');
     setIsLoading(false);
 
-    if (res.success) {
-      showToast(`Welcome back! Authenticated as ${res.role === 'admin' ? 'SIRI Caseworker' : 'Candidate'}.`, 'success');
-      if (res.role === 'admin') {
-        router.push('/admin');
-      } else {
-        router.push('/portal');
-      }
+    if (res.success && res.role === 'candidate') {
+      showToast('Authenticated as Candidate. Redirecting to dossier...', 'success');
+      router.push('/portal');
     } else {
       setShake(true);
       setTimeout(() => setShake(false), 500);
-      showToast(t('loginError'), 'error');
+      const err = res.errorReason || t('loginError');
+      setErrorMessage(err);
+      showToast(err, 'error');
     }
   };
 
   const handleAutofillCandidate = async () => {
+    setErrorMessage('');
     setEmail('dk3430143@gmail.com');
     setPassword('Dipak@1983');
     setIsLoading(true);
-    const res = await login('dk3430143@gmail.com', 'Dipak@1983');
+    const res = await login('dk3430143@gmail.com', 'Dipak@1983', 'candidate');
     setIsLoading(false);
     if (res.success) {
       showToast('Logged in as Dipak Karki (Candidate)', 'success');
       router.push('/portal');
-    }
-  };
-
-  const handleAutofillAdmin = async () => {
-    setEmail(MOCK_ADMIN_USER.email);
-    setPassword(MOCK_ADMIN_PASSWORD);
-    setIsLoading(true);
-    const res = await login(MOCK_ADMIN_USER.email, MOCK_ADMIN_PASSWORD);
-    setIsLoading(false);
-    if (res.success) {
-      showToast('Logged in as Morten Nyborg (SIRI Caseworker)', 'success');
-      router.push('/admin');
     }
   };
 
@@ -110,7 +100,14 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Form */}
+          {/* Error Banner */}
+          {errorMessage && (
+            <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 text-xs font-medium leading-relaxed">
+              {errorMessage}
+            </div>
+          )}
+
+          {/* Candidate Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
@@ -156,7 +153,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Collapsible Demo Drawer */}
+          {/* Collapsible Demo Drawer - CANDIDATE ONLY */}
           <div className="mt-6 pt-5 border-t border-slate-200 dark:border-slate-800">
             <button
               type="button"
@@ -171,15 +168,15 @@ export default function LoginPage() {
             </button>
 
             {showDemo && (
-              <div className="mt-3 space-y-2.5 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs animate-slide-up">
-                {/* Candidate Demo Box */}
+              <div className="mt-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs animate-slide-up">
+                {/* Candidate Demo Box Exclusively */}
                 <div className="p-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2">
                   <div>
                     <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
                       <User className="w-3.5 h-3.5 text-emerald-600" />
                       <span>Dipak Karki (Candidate)</span>
                     </div>
-                    <div className="text-[10px] text-slate-500 font-mono">
+                    <div className="text-[10px] text-slate-500 font-mono mt-0.5">
                       dk3430143@gmail.com &bull; Dipak@1983
                     </div>
                   </div>
@@ -191,28 +188,19 @@ export default function LoginPage() {
                     {t('clickToAutofill')}
                   </button>
                 </div>
-
-                {/* Caseworker Admin Box */}
-                <div className="p-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2">
-                  <div>
-                    <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
-                      <Shield className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Morten Nyborg (SIRI Admin)</span>
-                    </div>
-                    <div className="text-[10px] text-slate-500 font-mono">
-                      caseworker@siri.dk &bull; AdminSiri@2026
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAutofillAdmin}
-                    className="px-2.5 py-1 text-[11px] font-bold bg-blue-100 hover:bg-blue-200 text-blue-800 dark:bg-blue-950 dark:text-blue-300 rounded transition-colors whitespace-nowrap"
-                  >
-                    {t('clickToAutofill')}
-                  </button>
-                </div>
               </div>
             )}
+          </div>
+
+          {/* Discreet Caseworker Gateway Link */}
+          <div className="mt-5 text-center">
+            <Link
+              href="/admin/login"
+              className="text-[11px] text-slate-400 hover:text-brand-primary dark:hover:text-emerald-400 transition-colors inline-flex items-center gap-1"
+            >
+              <span>Authorized Caseworker Gateway</span>
+              <span>&rarr;</span>
+            </Link>
           </div>
         </div>
       </main>

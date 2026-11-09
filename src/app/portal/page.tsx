@@ -45,6 +45,8 @@ export default function CandidatePortalPage() {
   useEffect(() => {
     if (!user) {
       router.push('/');
+    } else if (user.role === 'admin') {
+      router.push('/admin');
     }
   }, [user, router]);
 

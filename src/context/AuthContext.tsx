@@ -2,14 +2,18 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { User, CandidateRecord, StageNumber, DocumentStatus, DocumentRecord } from '@/types';
+import { User, CandidateRecord, StageNumber, DocumentStatus, DocumentRecord, Role } from '@/types';
 import { INITIAL_CANDIDATES, MOCK_ADMIN_USER, MOCK_ADMIN_PASSWORD } from '@/data/mockUsers';
 
 interface AuthContextType {
   user: User | null;
   candidate: CandidateRecord | null;
   allCandidates: CandidateRecord[];
-  login: (email: string, pass: string) => Promise<{ success: boolean; role?: string }>;
+  login: (
+    email: string,
+    pass: string,
+    roleRestriction?: Role
+  ) => Promise<{ success: boolean; role?: Role; errorReason?: string }>;
   logout: () => void;
   selectCandidate: (id: string) => void;
   advanceCandidateStage: (candidateId: string) => void;
@@ -30,7 +34,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>('cand_dipak_karki');
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Initialize candidates & session from localStorage
+  // Initialize candidates & session from localStorage / sessionStorage
   useEffect(() => {
     try {
       const savedCandidates = localStorage.getItem('siri_candidates_list');
@@ -51,7 +55,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // Sync allCandidates to localStorage on updates
   const syncCandidates = (updatedList: CandidateRecord[]) => {
     setAllCandidates(updatedList);
     try {
@@ -61,21 +64,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const login = async (email: string, pass: string): Promise<{ success: boolean; role?: string }> => {
+  const login = async (
+    email: string,
+    pass: string,
+    roleRestriction?: Role
+  ): Promise<{ success: boolean; role?: Role; errorReason?: string }> => {
     const cleanEmail = email.trim().toLowerCase();
+    const isAdminCreds = cleanEmail === MOCK_ADMIN_USER.email.toLowerCase() && pass === MOCK_ADMIN_PASSWORD;
 
-    // 1. Check Admin
-    if (cleanEmail === MOCK_ADMIN_USER.email.toLowerCase() && pass === MOCK_ADMIN_PASSWORD) {
+    // 1. If portal specifies candidate only
+    if (roleRestriction === 'candidate' && isAdminCreds) {
+      return {
+        success: false,
+        errorReason: 'Administrative staff must log in via the authorized Caseworker gateway.',
+      };
+    }
+
+    // 2. If gateway specifies admin only
+    if (roleRestriction === 'admin' && !isAdminCreds) {
+      const candidateCheck = allCandidates.find((c) => c.email.toLowerCase() === cleanEmail);
+      if (candidateCheck) {
+        return {
+          success: false,
+          errorReason: 'Candidate accounts cannot access the administrative console. Please use the candidate portal.',
+        };
+      }
+      return {
+        success: false,
+        errorReason: 'Invalid administrative staff credentials.',
+      };
+    }
+
+    // 3. Admin Login Execution
+    if (isAdminCreds) {
       const adminUser: User = MOCK_ADMIN_USER;
       setUser(adminUser);
       sessionStorage.setItem('siri_auth_user', JSON.stringify(adminUser));
       return { success: true, role: 'admin' };
     }
 
-    // 2. Check Candidate Accounts
+    // 4. Candidate Login Execution
     const matchedCandidate = allCandidates.find((c) => c.email.toLowerCase() === cleanEmail);
     if (matchedCandidate) {
-      // Allow Dipak@1983 or general pattern
       let valid = false;
       if (cleanEmail === 'dk3430143@gmail.com' && (pass === 'Dipak@1983' || pass === 'dipak1983')) {
         valid = true;
@@ -84,7 +114,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else if (cleanEmail.includes('sunita') && pass === 'Sunita@1991') {
         valid = true;
       } else if (pass.length >= 4) {
-        // Fallback for custom testing
         valid = true;
       }
 
@@ -103,7 +132,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    return { success: false };
+    return { success: false, errorReason: 'Invalid credentials. Please verify your email and password.' };
   };
 
   const logout = () => {
@@ -116,7 +145,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSelectedCandidateId(id);
   };
 
-  // Stage advancement & rollback
   const advanceCandidateStage = (candidateId: string) => {
     const updated = allCandidates.map((c) => {
       if (c.id === candidateId && c.currentStage < 6) {
@@ -194,14 +222,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const nowStr = new Date().toISOString();
     const updated = allCandidates.map((c) => {
       if (c.id === candidateId) {
-        // Also update vfsletter document to verified
         const updatedDocs = c.documents.map((d) => {
           if (d.key === 'vfsletter') {
             return { ...d, status: 'verified' as const };
           }
           return d;
         });
-        // Check off checklist item 5
         const updatedChecklist = c.checklist.map((chk) => {
           if (chk.id === 'chk_5') return { ...chk, checked: true };
           return chk;
@@ -233,7 +259,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     syncCandidates(updated);
   };
 
-  // Find candidate for current session
   const candidate =
     user?.role === 'candidate'
       ? allCandidates.find((c) => c.id === user.candidateId) || allCandidates[0]

@@ -14,7 +14,7 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     
     // Login
     loginHeading: 'Danish Immigration & Candidate Portal',
-    loginSubheading: 'Herdsmen & Farm Managers Scheme · Verified Candidate & Caseworker Access',
+    loginSubheading: 'Herdsmen & Farm Managers Scheme · Official Applicant & Candidate Access',
     emailLabel: 'Registered Email Address',
     emailPlaceholder: 'e.g., dk3430143@gmail.com',
     passwordLabel: 'Security Password',
@@ -141,7 +141,7 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
 
     // Login
     loginHeading: 'Dansk Immigrations- & Kandidatportal',
-    loginSubheading: 'Fodermester- og Landbrugsmedhjælperordningen · Sikker Adgang',
+    loginSubheading: 'Fodermester- og Landbrugsmedhjælperordningen · Officiel Ansøgeradgang',
     emailLabel: 'Registreret E-mailadresse',
     emailPlaceholder: 'f.eks. dk3430143@gmail.com',
     passwordLabel: 'Sikkerhedskodeord',
@@ -268,7 +268,7 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
 
     // Login
     loginHeading: 'डेनिस अध्यागमन तथा उम्मेदवार पोर्टल',
-    loginSubheading: 'पशुपालन तथा कृषि व्यवस्थापक योजना · प्रमाणित उम्मेदवार पहुँच',
+    loginSubheading: 'पशुपालन तथा कृषि व्यवस्थापक योजना · आधिकारिक आवेदक पहुँच',
     emailLabel: 'दर्ता गरिएको इमेल ठेगाना',
     emailPlaceholder: 'जस्तै: dk3430143@gmail.com',
     passwordLabel: 'सुरक्षा पासवर्ड',
