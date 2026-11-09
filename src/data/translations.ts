@@ -1,0 +1,385 @@
+import { Language } from '@/types';
+
+export const TRANSLATIONS: Record<Language, Record<string, string>> = {
+  en: {
+    // Header & Meta
+    agencyName: 'DANISH AGENCY FOR INTERNATIONAL RECRUITMENT AND INTEGRATION',
+    agencySub: 'Ministry of Immigration and Integration · Udlændingestyrelsen & SIRI',
+    candidatePortal: 'Candidate Immigration Portal',
+    adminConsole: 'SIRI Caseworker Console',
+    logout: 'Log Out',
+    lightMode: 'Light Mode',
+    darkMode: 'Dark Mode',
+    printDossier: 'Print Dossier',
+    
+    // Login
+    loginHeading: 'Danish Immigration & Candidate Portal',
+    loginSubheading: 'Herdsmen & Farm Managers Scheme · Verified Candidate & Caseworker Access',
+    emailLabel: 'Registered Email Address',
+    emailPlaceholder: 'e.g., dk3430143@gmail.com',
+    passwordLabel: 'Security Password',
+    passwordPlaceholder: 'Enter your password',
+    loginBtn: 'Access Immigration Dashboard',
+    demoAccessTitle: 'Show Demo Credentials',
+    candidateDemo: 'Candidate Account (Dipak Karki)',
+    adminDemo: 'SIRI Caseworker Admin (Morten Nyborg)',
+    clickToAutofill: 'Auto-fill & Log In',
+    loginError: 'Invalid credentials. Please verify your email and password.',
+
+    // Stepper
+    stage1Title: 'Employment Contract Signed',
+    stage1Desc: 'Standard 37-hr Danish collective contract signed under 3F / GLA terms at DKK 35,705/mo.',
+    stage2Title: 'SIRI Case Order ID Created & Paid',
+    stage2Desc: 'SIRI Case Order ID SB6-948123-2026 registered. DKK 4,405 statutory fee cleared via Nets.',
+    stage3Title: 'Online Application Form (AR1) Submitted',
+    stage3Desc: 'Joint digital submission confirmed via Newtodenmark.dk online portal.',
+    stage4Title: 'VFS Biometrics & Passport Presentation',
+    stage4Desc: 'Sign biometric consent declaration & present passport at VFS Global Kathmandu.',
+    stage5Title: 'SIRI Case Processing & Assessment',
+    stage5Desc: 'Statutory qualification, salary baseline compliance, and employer housing assessment.',
+    stage6Title: 'Residence & Work Permit Decision',
+    stage6Desc: 'Digital approval issuance, opholdskort (residence card), and entry visa vignette.',
+    stageCompleted: 'Completed',
+    stageActive: 'Action Required',
+    stagePending: 'Upcoming',
+
+    // Briefing
+    briefingTitle: 'Live Pre-Departure Briefing & Facial Verification',
+    briefingHost: 'With Senior Immigration Officer Milan · Central European Time (UTC+1)',
+    joinZoom: 'Join Scheduled Zoom Briefing',
+    briefingStartsIn: 'Session starts in:',
+    hours: 'Hours',
+    minutes: 'Minutes',
+    seconds: 'Seconds',
+
+    // Candidate Details
+    candidateSummary: 'Verified Applicant & Immigration Dossier',
+    fullName: 'Full Name',
+    passportNumber: 'Passport Number',
+    dob: 'Date of Birth',
+    nationality: 'Nationality',
+    address: 'Permanent Address',
+    phone: 'Primary Contact',
+    scheme: 'Immigration Scheme',
+    jobTitle: 'Designated Role',
+    salary: 'Registered Remuneration',
+    collectiveAgreement: 'Collective Agreement Standard',
+
+    // Employer
+    employerRegistry: 'Danish Employer & Sponsor Registry',
+    cvr: 'Danish Central Business Reg. (CVR)',
+    sponsorCode: 'Sponsor Registry Code',
+    registeredOffice: 'Registered Office',
+    collectiveTerms: 'Collective Agreement Standard',
+
+    // Tracking Widgets
+    siriCaseWidgetTitle: 'SIRI Case Order ID',
+    siriCaseStatus: 'FEE PAID & REGISTERED',
+    statutoryFee: 'Statutory Fee',
+    vfsWidgetTitle: 'VFS Global Appointment Desk',
+    vfsStatus: 'SLOT BOOKED',
+    vfsCenter: 'Center',
+    vfsSlot: 'Biometrics Slot',
+    vfsAction: 'Required Action',
+    addToCalendar: 'Add to Calendar (.ics)',
+    viewOnMaps: 'View Center on Maps',
+
+    // Documents
+    documentLedger: 'Official SIRI Documents Ledger',
+    preview: 'Preview',
+    downloadPdf: 'Download (.pdf)',
+    candidateUploadBadge: 'Candidate Upload · Embassy Pending',
+    verifiedBadge: 'Verified & Reconciled',
+    
+    // Upload Zone
+    uploadTitle: 'Upload Supporting Credentials & Certificates',
+    uploadDesc: 'Attach certified agricultural diplomas, vocational certificates, heavy equipment permits, or prior dairy experience records to expedite Danish Agency (SIRI) dossier assessment. All uploaded certificates are verified and dynamically appended to your authorized immigration ledger.',
+    dropzonePrimary: 'Drag & drop certificates here, or browse files',
+    dropzoneSecondary: 'Accepted formats: PDF, PNG, JPG · Maximum file size: 10 MB per file',
+    categoryLabel: 'Certificate Category',
+    customTitleLabel: 'Custom Document Label (Optional)',
+    attachBtn: 'Attach to Dossier',
+
+    // Signature Modal
+    signModalTitle: 'Biometric Consent & Data Privacy Declaration',
+    signModalDesc: 'In accordance with Section 9a of the Danish Aliens Act, sign below to authorize VFS Global Kathmandu and the Danish Immigration Service (SIRI) to record your digital facial photo and ten-print fingerprint biometrics.',
+    clearSig: 'Clear Signature',
+    cancel: 'Cancel',
+    confirmSig: 'Confirm & Sign Declaration',
+
+    // Checklist
+    checklistTitle: 'Pre-Biometrics Preparation Checklist',
+
+    // Admin Console
+    adminTitle: 'SIRI Caseworker Review Console',
+    searchPlaceholder: 'Search candidate name, passport, or Case Order ID...',
+    allStages: 'All Stages',
+    stageFilter: 'Stage Filter',
+    stageOverride: 'Stage Override Controls',
+    advanceStage: 'Advance Stage',
+    rollbackStage: 'Rollback Stage',
+    selectStage: 'Set Specific Stage',
+    documentReview: 'Document Verification & Consular Audit',
+    approve: 'Approve',
+    flag: 'Flag for Review',
+    applicantSignature: 'Recorded Biometric Signature',
+    noSignatureYet: 'No signature recorded yet by candidate.',
+    verifiedSignatureText: 'Digitally signed and cryptographically stored in SIRI ledger.',
+    notesLabel: 'Caseworker Internal Notes',
+    saveNotes: 'Save Notes',
+  },
+  da: {
+    // Header & Meta
+    agencyName: 'STYRELSEN FOR INTERNATIONAL REKRUTTERING OG INTEGRATION',
+    agencySub: 'Udlændinge- og Integrationsministeriet · Udlændingestyrelsen & SIRI',
+    candidatePortal: 'Kandidat Immigrationsportal',
+    adminConsole: 'SIRI Sagsbehandler Konsol',
+    logout: 'Log Ud',
+    lightMode: 'Lyst Tema',
+    darkMode: 'Mørkt Tema',
+    printDossier: 'Udskriv Sagsakt',
+
+    // Login
+    loginHeading: 'Dansk Immigrations- & Kandidatportal',
+    loginSubheading: 'Fodermester- og Landbrugsmedhjælperordningen · Sikker Adgang',
+    emailLabel: 'Registreret E-mailadresse',
+    emailPlaceholder: 'f.eks. dk3430143@gmail.com',
+    passwordLabel: 'Sikkerhedskodeord',
+    passwordPlaceholder: 'Indtast dit kodeord',
+    loginBtn: 'Gå til Immigrationspanel',
+    demoAccessTitle: 'Vis Demobrugeroplysninger',
+    candidateDemo: 'Kandidatkonto (Dipak Karki)',
+    adminDemo: 'SIRI Sagsbehandler Admin (Morten Nyborg)',
+    clickToAutofill: 'Udfyld & Log Ind',
+    loginError: 'Ugyldige adgangsoplysninger. Tjek venligst e-mail og adgangskode.',
+
+    // Stepper
+    stage1Title: 'Ansættelseskontrakt Underskrevet',
+    stage1Desc: 'Standard 37-timers dansk overenskomstkontrakt underskrevet under 3F / GLA til 35.705 kr./md.',
+    stage2Title: 'SIRI Sagsordrenr. Oprettet & Betalt',
+    stage2Desc: 'Sagsordrenr. SB6-948123-2026 registreret. Gebyr på 4.405 DKK afregnet via Nets.',
+    stage3Title: 'Online Ansøgningsskema (AR1) Indgivet',
+    stage3Desc: 'Fælles digital indsendelse bekræftet via Nyidanmark.dk portal.',
+    stage4Title: 'VFS Biometri & Pasfremvisning',
+    stage4Desc: 'Underskriv biometrierklæring og fremmød personligt hos VFS Global Kathmandu.',
+    stage5Title: 'SIRI Sagsbehandling & Vurdering',
+    stage5Desc: 'Myndighedsvurdering af kvalifikationer, overenskomstmæssig løn og passende boligforhold.',
+    stage6Title: 'Afgørelse om Opholds- og Arbejdstilladelse',
+    stage6Desc: 'Digital godkendelse, opholdskort og udstedelse af D-visum vignette.',
+    stageCompleted: 'Gennemført',
+    stageActive: 'Handling Påkrævet',
+    stagePending: 'Kommende',
+
+    // Briefing
+    briefingTitle: 'Direkte Forberedelsesbriefing & Ansigtsverifikation',
+    briefingHost: 'Med Senior Sagsbehandler Milan · Centraleuropæisk Tid (UTC+1)',
+    joinZoom: 'Deltag i Planlagt Zoom-møde',
+    briefingStartsIn: 'Mødet begynder om:',
+    hours: 'Timer',
+    minutes: 'Minutter',
+    seconds: 'Sekunder',
+
+    // Candidate Details
+    candidateSummary: 'Verificeret Ansøger- & Immigrationsdossier',
+    fullName: 'Fulde Navn',
+    passportNumber: 'Pasnummer',
+    dob: 'Fødselsdato',
+    nationality: 'Nationalitet',
+    address: 'Permanent Adresse',
+    phone: 'Primær Telefon',
+    scheme: 'Immigrationsordning',
+    jobTitle: 'Stilling',
+    salary: 'Registreret Løn',
+    collectiveAgreement: 'Overenskomststandard',
+
+    // Employer
+    employerRegistry: 'Dansk Arbejdsgiver- & Sponsorregister',
+    cvr: 'Centralt Virksomhedsregister (CVR)',
+    sponsorCode: 'Sponsorkode',
+    registeredOffice: 'Hovedkontor',
+    collectiveTerms: 'Overenskomststandard',
+
+    // Tracking Widgets
+    siriCaseWidgetTitle: 'SIRI Sagsordrenr.',
+    siriCaseStatus: 'GEBYR BETALT & REGISTRERET',
+    statutoryFee: 'Lovpligtigt Gebyr',
+    vfsWidgetTitle: 'VFS Global Biometriskranke',
+    vfsStatus: 'TID BESTILT',
+    vfsCenter: 'Center',
+    vfsSlot: 'Biometritid',
+    vfsAction: 'Påkrævet Handling',
+    addToCalendar: 'Føj til Kalender (.ics)',
+    viewOnMaps: 'Vis Center på Kort',
+
+    // Documents
+    documentLedger: 'Officielt SIRI Dokumentregister',
+    preview: 'Vis',
+    downloadPdf: 'Hent (.pdf)',
+    candidateUploadBadge: 'Kandidat Upload · Afventer Ambassade',
+    verifiedBadge: 'Verificeret & Godkendt',
+
+    // Upload Zone
+    uploadTitle: 'Upload Supplerende Certifikater & Dokumenter',
+    uploadDesc: 'Vedhæft landbrugsuddannelsesbeviser, traktorcertifikater eller erfaring for at fremme sagsbehandlingen hos SIRI.',
+    dropzonePrimary: 'Træk og slip filer her, eller vælg filer',
+    dropzoneSecondary: 'Godkendte formater: PDF, PNG, JPG · Maks. 10 MB pr. fil',
+    categoryLabel: 'Certifikatkategori',
+    customTitleLabel: 'Valgfri Dokumenttitel',
+    attachBtn: 'Vedhæft til Sag',
+
+    // Signature Modal
+    signModalTitle: 'Biometrisamtykke & Databeskyttelseserklæring',
+    signModalDesc: 'I henhold til Udlændingelovens § 9 a underskrives hermed for optagelse af biometri hos VFS Global.',
+    clearSig: 'Ryd Underskrift',
+    cancel: 'Annuller',
+    confirmSig: 'Bekræft & Underskriv',
+
+    // Checklist
+    checklistTitle: 'Tjekliste før Biometri',
+
+    // Admin Console
+    adminTitle: 'SIRI Sagsbehandler Kontrolpanel',
+    searchPlaceholder: 'Søg på navn, pasnummer eller sagsordrenr...',
+    allStages: 'Alle Faser',
+    stageFilter: 'Fasefiltrering',
+    stageOverride: 'Manuel Fasestyring',
+    advanceStage: 'Ryk Frem til Næste Fase',
+    rollbackStage: 'Ryk Tilbage til Forrige Fase',
+    selectStage: 'Vælg Specifik Fase',
+    documentReview: 'Dokumentverifikation & Konsulær Gennemgang',
+    approve: 'Godkend',
+    flag: 'Afmærk til Undersøgelse',
+    applicantSignature: 'Registreret Biometri-Underskrift',
+    noSignatureYet: 'Ingen underskrift registreret endnu.',
+    verifiedSignatureText: 'Digitalt signeret og opbevaret i SIRI arkiv.',
+    notesLabel: 'Interne Sagsbehandlernotater',
+    saveNotes: 'Gem Notater',
+  },
+  ne: {
+    // Header & Meta
+    agencyName: 'डेनमार्क अन्तर्राष्ट्रिय भर्ती तथा एकीकरण निकाय (SIRI)',
+    agencySub: 'अध्यागमन तथा एकीकरण मन्त्रालय · Udlændingestyrelsen र SIRI',
+    candidatePortal: 'उम्मेदवार अध्यागमन पोर्टल',
+    adminConsole: 'SIRI केसवर्कर कन्सोल',
+    logout: 'लग आउट',
+    lightMode: 'लाइट मोड',
+    darkMode: 'डार्क मोड',
+    printDossier: 'कागजात प्रिन्ट गर्नुहोस्',
+
+    // Login
+    loginHeading: 'डेनिस अध्यागमन तथा उम्मेदवार पोर्टल',
+    loginSubheading: 'पशुपालन तथा कृषि व्यवस्थापक योजना · प्रमाणित उम्मेदवार पहुँच',
+    emailLabel: 'दर्ता गरिएको इमेल ठेगाना',
+    emailPlaceholder: 'जस्तै: dk3430143@gmail.com',
+    passwordLabel: 'सुरक्षा पासवर्ड',
+    passwordPlaceholder: 'तपाईंको पासवर्ड प्रविष्ट गर्नुहोस्',
+    loginBtn: 'ड्यासबोर्ड प्रवेश गर्नुहोस्',
+    demoAccessTitle: 'डेमो प्रमाणहरू हेर्नुहोस्',
+    candidateDemo: 'उम्मेदवार खाता (दीपक कार्की)',
+    adminDemo: 'SIRI केसवर्कर प्रशासक (मोर्टेन नाइबोर्ग)',
+    clickToAutofill: 'स्वतः भर्नुहोस् र लगइन गर्नुहोस्',
+    loginError: 'गलत इमेल वा पासवर्ड। कृपया पुन: प्रयास गर्नुहोस्।',
+
+    // Stepper
+    stage1Title: 'रोजगार सम्झौता हस्ताक्षर गरियो',
+    stage1Desc: '३F / GLA सामूहिक सम्झौता अन्तर्गत ३७ घन्टा/हप्ता र DKK ३५,७०५/महिना तलब तय।',
+    stage2Title: 'SIRI केस अर्डर ID दर्ता र भुक्तानी',
+    stage2Desc: 'केस अर्डर ID SB6-948123-2026 दर्ता। Nets मार्फत DKK ४,४०५ शुल्क भुक्तान।',
+    stage3Title: 'अनलाइन आवेदन फारम (AR1) पेश गरियो',
+    stage3Desc: 'Newtodenmark.dk अनलाइन पोर्टलमा रोजगारदाता र उम्मेदवारको तर्फबाट पेश गरियो।',
+    stage4Title: 'VFS बायोमेट्रिक्स र राहदानी पेश',
+    stage4Desc: 'बायोमेट्रिक सहमति हस्ताक्षर गर्नुहोस् र VFS Global काठमाडौँमा उपस्थित हुनुहोस्।',
+    stage5Title: 'SIRI केस प्रशोधन तथा मूल्याङ्कन',
+    stage5Desc: 'डेनिस अध्यागमन निकायद्वारा योग्यता, तलब र आवासको कानूनी परीक्षण।',
+    stage6Title: 'बसोबास र कार्य अनुमति निर्णय',
+    stage6Desc: 'डिजिटल स्वीकृति पत्र, बायोमेट्रिक कार्ड (opholdskort) र भिसा स्टिकर जारी।',
+    stageCompleted: 'सम्पन्न भयो',
+    stageActive: 'तुरुन्त आवश्यक',
+    stagePending: 'आगामी',
+
+    // Briefing
+    briefingTitle: 'पूर्व-प्रस्थान प्रत्यक्ष ब्रिफिङ तथा मुहार प्रमाणिकरण',
+    briefingHost: 'वरिष्ठ अध्यागमन अधिकारी मिलनसँग · केन्द्रीय युरोपेली समय (UTC+1)',
+    joinZoom: 'जुम ब्रिफिङमा सहभागी हुनुहोस्',
+    briefingStartsIn: 'सत्र सुरु हुन बाँकी समय:',
+    hours: 'घन्टा',
+    minutes: 'मिनेट',
+    seconds: 'सेकेन्ड',
+
+    // Candidate Details
+    candidateSummary: 'प्रमाणित आवेदक र अध्यागमन विवरण',
+    fullName: 'पूरा नाम',
+    passportNumber: 'राहदानी नम्बर',
+    dob: 'जन्म मिति',
+    nationality: 'राष्ट्रियता',
+    address: 'स्थायी ठेगाना',
+    phone: 'सम्पर्क नम्बर',
+    scheme: 'अध्यागमन योजना',
+    jobTitle: 'पद/भूमिका',
+    salary: 'दर्ता गरिएको तलब',
+    collectiveAgreement: 'सामूहिक सम्झौता मानक',
+
+    // Employer
+    employerRegistry: 'डेनिस रोजगारदाता तथा प्रायोजक दर्ता',
+    cvr: 'डेनिस केन्द्रीय व्यापार दर्ता (CVR)',
+    sponsorCode: 'प्रायोजक कोड',
+    registeredOffice: 'मुख्य कार्यालय',
+    collectiveTerms: 'सामूहिक सम्झौता मानक',
+
+    // Tracking Widgets
+    siriCaseWidgetTitle: 'SIRI केस अर्डर ID',
+    siriCaseStatus: 'शुल्क भुक्तान र दर्ता भएको',
+    statutoryFee: 'कानूनी दस्तुर',
+    vfsWidgetTitle: 'VFS Global अपोइन्टमेन्ट डेस्क',
+    vfsStatus: 'समय बुक गरियो',
+    vfsCenter: 'केन्द्र',
+    vfsSlot: 'बायोमेट्रिक्स समय',
+    vfsAction: 'आवश्यक कार्य',
+    addToCalendar: 'क्यालेन्डरमा थप्नुहोस् (.ics)',
+    viewOnMaps: 'नक्सामा केन्द्र हेर्नुहोस्',
+
+    // Documents
+    documentLedger: 'आधिकारिक SIRI कागजात लेजर',
+    preview: 'हेर्नुहोस्',
+    downloadPdf: 'डाउनलोड (.pdf)',
+    candidateUploadBadge: 'उम्मेदवार अपलोड · दूतावास प्रमाणीकरण बाँकी',
+    verifiedBadge: 'प्रमाणित तथा सुरक्षित',
+
+    // Upload Zone
+    uploadTitle: 'थप प्रमाणपत्रहरू तथा कागजातहरू अपलोड गर्नुहोस्',
+    uploadDesc: 'कृषि तालीम प्रमाणपत्र (CTEVT), सवारी चालक अनुमतिपत्र, वा अनुभव पत्र थप्नुहोस्।',
+    dropzonePrimary: 'कागजात यहाँ तान्नुहोस् वा छनोट गर्नुहोस्',
+    dropzoneSecondary: 'स्वीकृत ढाँचाहरू: PDF, PNG, JPG · अधिकतम आकार: १० MB प्रति फाइल',
+    categoryLabel: 'प्रमाणपत्र वर्ग',
+    customTitleLabel: 'कागजातको नाम (वैकल्पिक)',
+    attachBtn: 'फाइल संलग्न गर्नुहोस्',
+
+    // Signature Modal
+    signModalTitle: 'बायोमेट्रिक सहमति तथा गोपनीयता घोषणा',
+    signModalDesc: 'डेनिस विदेशी ऐनको दफा ९a बमोजिम VFS Global काठमाडौँलाई बायोमेट्रिक्स लिन सहमति जनाउनुहोस्।',
+    clearSig: 'हटाउनुहोस्',
+    cancel: 'रद्द गर्नुहोस्',
+    confirmSig: 'पुष्टि गर्नुहोस् र हस्ताक्षर गर्नुहोस्',
+
+    // Checklist
+    checklistTitle: 'बायोमेट्रिक्स पूर्व तयारी सूची',
+
+    // Admin Console
+    adminTitle: 'SIRI केसवर्कर समीक्षा कन्सोल',
+    searchPlaceholder: 'उम्मेदवारको नाम, राहदानी वा केस अर्डर खोज्नुहोस्...',
+    allStages: 'सबै चरणहरू',
+    stageFilter: 'चरण फिल्टर',
+    stageOverride: 'चरण परिवर्तन नियन्त्रण',
+    advanceStage: 'अर्को चरणमा सार्नुहोस्',
+    rollbackStage: 'अघिल्लो चरणमा फर्काउनुहोस्',
+    selectStage: 'निश्चित चरण छान्नुहोस्',
+    documentReview: 'कागजात प्रमाणीकरण तथा कन्सुलर अडिट',
+    approve: 'स्वीकृत गर्नुहोस्',
+    flag: 'पुनरावलोकनका लागि चिन्ह लगाउनुहोस्',
+    applicantSignature: 'दर्ता गरिएको बायोमेट्रिक हस्ताक्षर',
+    noSignatureYet: 'अहिलेसम्म कुनै हस्ताक्षर दर्ता भएको छैन।',
+    verifiedSignatureText: 'डिजिटल हस्ताक्षर भई SIRI लेजरमा सुरक्षित गरिएको।',
+    notesLabel: 'केसवर्कर आन्तरिक टिप्पणीहरू',
+    saveNotes: 'टिप्पणी सुरक्षित गर्नुहोस्',
+  },
+};
