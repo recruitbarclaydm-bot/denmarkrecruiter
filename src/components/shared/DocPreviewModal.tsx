@@ -103,11 +103,11 @@ export const DocPreviewModal: React.FC<DocPreviewModalProps> = ({
               </div>
               <div>
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Scheme</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200">Herdsmen & Farm Managers (§9a)</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{candidate.siriCaseOrder?.scheme || candidate.jobTitle}</span>
               </div>
               <div>
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Employer</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200">{candidate.employer.name} (CVR: {candidate.employer.cvr})</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{candidate.employer.name} {candidate.employer.cvr ? `(CVR: ${candidate.employer.cvr})` : ''}</span>
               </div>
             </div>
 

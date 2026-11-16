@@ -61,7 +61,8 @@ export default function AdminPage() {
     const matchesSearch =
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.passportNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.siriCaseOrder.caseOrderId.toLowerCase().includes(searchQuery.toLowerCase());
+      (c.siriCaseOrder?.caseOrderId || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.employer?.sponsorCode || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStage = selectedStageFilter === 'all' || c.currentStage === selectedStageFilter;
     return matchesSearch && matchesStage;
   });
@@ -191,7 +192,7 @@ export default function AdminPage() {
                           {c.name}
                         </div>
                         <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                          {c.passportNumber} &middot; {c.siriCaseOrder.caseOrderId}
+                          {c.passportNumber} &middot; {c.employer?.sponsorCode || c.siriCaseOrder?.caseOrderId}
                         </div>
                       </div>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
@@ -229,7 +230,7 @@ export default function AdminPage() {
                     </span>
                   </div>
                   <div className="text-xs text-slate-500 mt-1">
-                    DOB: {candidate.dob} ({candidate.nationality}) &middot; Case Order: {candidate.siriCaseOrder.caseOrderId}
+                    DOB: {candidate.dob} ({candidate.nationality}) &middot; Scheme: {candidate.jobTitle} &middot; Ref: {candidate.siriCaseOrder?.caseOrderId || candidate.employer?.sponsorCode}
                   </div>
                 </div>
 
@@ -270,12 +271,11 @@ export default function AdminPage() {
                       onChange={handleSetStage}
                       className="text-xs font-semibold p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200"
                     >
-                      <option value={1}>Stage 1: Contract Signed</option>
-                      <option value={2}>Stage 2: Case Order Paid</option>
-                      <option value={3}>Stage 3: Form AR1 Submitted</option>
-                      <option value={4}>Stage 4: VFS Biometrics</option>
-                      <option value={5}>Stage 5: SIRI Assessment</option>
-                      <option value={6}>Stage 6: Decision Issued</option>
+                      {candidate.stages.map((st) => (
+                        <option key={st.number} value={st.number}>
+                          Stage {st.number}: {st.title}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>

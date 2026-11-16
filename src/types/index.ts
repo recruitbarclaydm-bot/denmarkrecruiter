@@ -87,6 +87,26 @@ export interface CandidateRecord {
   checklist: ChecklistItem[];
   signatureDataUrl?: string;
   signatureTimestamp?: string;
+  schemeType?: 'siri_herdsman' | 'seasonal_agriculture';
+  contractDuration?: string;
+  statusBadgeText?: string;
+  denbarAccount?: {
+    amount: string;
+    status: string;
+    vfsFee: string;
+    linkedTo: string;
+  };
+  actionRequired?: {
+    facialTime: string;
+    subscription: string;
+    task: string;
+  };
+  quickActions?: {
+    zoomUrl: string;
+    supportEmail: string;
+    subscriptionAmount: string;
+  };
+  courierTracking?: string;
 }
 
 export interface User {

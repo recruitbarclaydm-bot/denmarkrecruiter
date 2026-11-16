@@ -31,7 +31,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [allCandidates, setAllCandidates] = useState<CandidateRecord[]>(INITIAL_CANDIDATES);
-  const [selectedCandidateId, setSelectedCandidateId] = useState<string>('cand_dipak_karki');
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string>('dipak-karki');
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Initialize candidates & session from localStorage / sessionStorage
@@ -39,14 +39,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const savedCandidates = localStorage.getItem('siri_candidates_list');
       if (savedCandidates) {
-        setAllCandidates(JSON.parse(savedCandidates));
+        const parsed: CandidateRecord[] = JSON.parse(savedCandidates);
+        // Ensure all initial candidates (including Nokha) are present in the list
+        const missing = INITIAL_CANDIDATES.filter(
+          (ic) => !parsed.some((p) => p.id === ic.id || p.email.toLowerCase() === ic.email.toLowerCase())
+        );
+        if (missing.length > 0) {
+          const merged = [...parsed, ...missing];
+          setAllCandidates(merged);
+          localStorage.setItem('siri_candidates_list', JSON.stringify(merged));
+        } else {
+          setAllCandidates(parsed);
+        }
       } else {
         localStorage.setItem('siri_candidates_list', JSON.stringify(INITIAL_CANDIDATES));
       }
 
       const savedUser = sessionStorage.getItem('siri_auth_user');
       if (savedUser) {
-        setUser(JSON.parse(savedUser));
+        const parsedUser = JSON.parse(savedUser);
+        setUser(parsedUser);
+        if (parsedUser.candidateId) {
+          setSelectedCandidateId(parsedUser.candidateId);
+        }
       }
     } catch (e) {
       console.error('Error loading session or candidates:', e);
@@ -108,6 +123,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (matchedCandidate) {
       let valid = false;
       if (cleanEmail === 'dk3430143@gmail.com' && (pass === 'Dipak@1983' || pass === 'dipak1983')) {
+        valid = true;
+      } else if (cleanEmail === 'madanadhikari65@gmail.com' && (pass === 'Nokha@1992' || pass === 'nokha1992')) {
         valid = true;
       } else if (cleanEmail.includes('thapa') && pass === 'Bikash@1988') {
         valid = true;
@@ -261,7 +278,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const candidate =
     user?.role === 'candidate'
-      ? allCandidates.find((c) => c.id === user.candidateId) || allCandidates[0]
+      ? allCandidates.find((c) => c.id === user.candidateId || c.email.toLowerCase() === user.email.toLowerCase()) || allCandidates[0]
       : allCandidates.find((c) => c.id === selectedCandidateId) || allCandidates[0];
 
   return (

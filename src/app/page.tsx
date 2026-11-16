@@ -59,7 +59,7 @@ export default function CandidateLoginPage() {
     }
   };
 
-  const handleAutofillCandidate = async () => {
+  const handleAutofillDipak = async () => {
     setErrorMessage('');
     setEmail('dk3430143@gmail.com');
     setPassword('Dipak@1983');
@@ -68,6 +68,19 @@ export default function CandidateLoginPage() {
     setIsLoading(false);
     if (res.success) {
       showToast('Logged in as Dipak Karki (Candidate)', 'success');
+      router.push('/portal');
+    }
+  };
+
+  const handleAutofillNokha = async () => {
+    setErrorMessage('');
+    setEmail('madanadhikari65@gmail.com');
+    setPassword('Nokha@1992');
+    setIsLoading(true);
+    const res = await login('madanadhikari65@gmail.com', 'Nokha@1992', 'candidate');
+    setIsLoading(false);
+    if (res.success) {
+      showToast('Logged in as Nokha Nath Adhikari (Candidate)', 'success');
       router.push('/portal');
     }
   };
@@ -167,8 +180,8 @@ export default function CandidateLoginPage() {
             </button>
 
             {showDemo && (
-              <div className="mt-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs animate-slide-up">
-                {/* Candidate Demo Box Exclusively */}
+              <div className="mt-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs animate-slide-up space-y-2.5">
+                {/* Candidate 1: Dipak Karki */}
                 <div className="p-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2">
                   <div>
                     <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
@@ -181,7 +194,27 @@ export default function CandidateLoginPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={handleAutofillCandidate}
+                    onClick={handleAutofillDipak}
+                    className="px-2.5 py-1 text-[11px] font-bold bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded transition-colors whitespace-nowrap"
+                  >
+                    {t('clickToAutofill')}
+                  </button>
+                </div>
+
+                {/* Candidate 2: Nokha Nath Adhikari */}
+                <div className="p-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2">
+                  <div>
+                    <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                      <User className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Nokha Nath Adhikari (Candidate)</span>
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                      madanadhikari65@gmail.com &bull; Nokha@1992
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAutofillNokha}
                     className="px-2.5 py-1 text-[11px] font-bold bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded transition-colors whitespace-nowrap"
                   >
                     {t('clickToAutofill')}

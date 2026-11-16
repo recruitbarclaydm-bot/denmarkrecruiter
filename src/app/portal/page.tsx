@@ -11,6 +11,7 @@ import { LiveBriefingCard } from '@/components/portal/LiveBriefingCard';
 import { DocumentUploadCard } from '@/components/portal/DocumentUploadCard';
 import { ChecklistCard } from '@/components/portal/ChecklistCard';
 import { SignatureModal } from '@/components/portal/SignatureModal';
+import { SeasonalAgriPortal } from '@/components/portal/SeasonalAgriPortal';
 import { DocPreviewModal } from '@/components/shared/DocPreviewModal';
 import { generateAndDownloadVfsIcs } from '@/lib/icsGenerator';
 import { generateDocumentPdf } from '@/lib/pdfGenerator';
@@ -51,6 +52,22 @@ export default function CandidatePortalPage() {
   }, [user, router]);
 
   if (!candidate) return null;
+
+  // Dedicated dynamic view for Denmark Seasonal Agricultural Scheme (Nokha Nath Adhikari)
+  if (
+    candidate.id === 'nokha-adhikari' ||
+    candidate.schemeType === 'seasonal_agriculture' ||
+    candidate.email.toLowerCase() === 'madanadhikari65@gmail.com'
+  ) {
+    return (
+      <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex flex-col transition-colors">
+        <Header />
+        <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <SeasonalAgriPortal candidate={candidate} />
+        </main>
+      </div>
+    );
+  }
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
