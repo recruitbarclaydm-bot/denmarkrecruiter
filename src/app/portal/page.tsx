@@ -11,8 +11,8 @@ import { Stepper } from '@/components/portal/Stepper';
 import { LiveBriefingCard } from '@/components/portal/LiveBriefingCard';
 import { DocumentUploadCard } from '@/components/portal/DocumentUploadCard';
 import { ChecklistCard } from '@/components/portal/ChecklistCard';
+import { MandatoryOnboardingWizard, calculateCandidateReadiness, shouldOpenCandidateOnboarding } from '@/components/portal/MandatoryOnboardingWizard';
 import { SignatureModal } from '@/components/portal/SignatureModal';
-import { KycSubmissionModal } from '@/components/portal/KycSubmissionModal';
 import { DocumentSigningModal } from '@/components/portal/DocumentSigningModal';
 import { SeasonalAgriPortal } from '@/components/portal/SeasonalAgriPortal';
 import { DocPreviewModal } from '@/components/shared/DocPreviewModal';
@@ -48,8 +48,9 @@ export default function CandidatePortalPage() {
   const [maskPassport, setMaskPassport] = useState(true);
   const [activeDocForPreview, setActiveDocForPreview] = useState<DocumentRecord | null>(null);
   const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
-  const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [docForSigning, setDocForSigning] = useState<DocumentRecord | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
+  const [onboardingCandidateId, setOnboardingCandidateId] = useState('');
 
   // Re-upload state
   const [targetReuploadDocId, setTargetReuploadDocId] = useState<string | null>(null);
@@ -61,6 +62,13 @@ export default function CandidatePortalPage() {
     : user
     ? candidates.find((c) => c.email.toLowerCase() === user.email.toLowerCase())
     : null;
+
+  useEffect(() => {
+    if (candidate && onboardingCandidateId !== candidate.id) {
+      setShowOnboarding(shouldOpenCandidateOnboarding(candidate));
+      setOnboardingCandidateId(candidate.id);
+    }
+  }, [candidate, onboardingCandidateId]);
 
   // Authentication & Approval Guards
   useEffect(() => {
@@ -77,7 +85,7 @@ export default function CandidatePortalPage() {
     }
   }, [user, candidate, router]);
 
-  if (!candidate) return null;
+  if (!candidate || showOnboarding === null) return null;
 
   // Dedicated dynamic view for Denmark Seasonal Agricultural Scheme (Nokha Nath Adhikari)
   if (
@@ -88,8 +96,21 @@ export default function CandidatePortalPage() {
     return (
       <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex flex-col transition-colors">
         <Header />
-        <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <SeasonalAgriPortal candidate={candidate} />
+        <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-5">
+          {showOnboarding ? (
+            <MandatoryOnboardingWizard candidate={candidate} onViewTracker={() => setShowOnboarding(false)} />
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                <div className="min-w-0 flex-1">
+                  <div className="flex justify-between text-xs font-bold"><span>Dossier &amp; Biometric Readiness</span><span>{calculateCandidateReadiness(candidate)}%</span></div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"><div className="h-full bg-emerald-600" style={{ width: `${calculateCandidateReadiness(candidate)}%` }} /></div>
+                </div>
+                <button onClick={() => setShowOnboarding(true)} className="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold dark:border-slate-600">Mandatory Onboarding</button>
+              </div>
+              <SeasonalAgriPortal candidate={candidate} onOpenOnboarding={() => setShowOnboarding(true)} />
+            </>
+          )}
         </main>
       </div>
     );
@@ -151,6 +172,17 @@ export default function CandidatePortalPage() {
       <Header />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {showOnboarding ? (
+          <MandatoryOnboardingWizard candidate={candidate} onViewTracker={() => setShowOnboarding(false)} />
+        ) : (
+          <>
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+          <div className="min-w-0 flex-1">
+            <div className="flex justify-between text-xs font-bold text-slate-700 dark:text-slate-200"><span>Dossier &amp; Biometric Readiness</span><span>{calculateCandidateReadiness(candidate)}%</span></div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"><div className="h-full bg-emerald-600 transition-all" style={{ width: `${calculateCandidateReadiness(candidate)}%` }} /></div>
+          </div>
+          <button onClick={() => setShowOnboarding(true)} className="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 dark:border-slate-600 dark:text-slate-200">Mandatory Onboarding</button>
+        </div>
         {/* Stepper */}
         <Stepper candidate={candidate} />
 
@@ -204,7 +236,7 @@ export default function CandidatePortalPage() {
             </div>
 
             <button
-              onClick={() => setIsKycModalOpen(true)}
+              onClick={() => setShowOnboarding(true)}
               className="px-4 py-2 text-xs font-bold rounded-lg bg-brand-primary hover:bg-brand-secondary text-white shadow-sm flex items-center gap-1.5 self-end sm:self-auto flex-shrink-0"
             >
               <ShieldCheck className="w-4 h-4" />
@@ -263,8 +295,10 @@ export default function CandidatePortalPage() {
         <div className="bg-white dark:bg-slate-900 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 transition-colors">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-emerald-100 dark:bg-emerald-950 text-brand-primary dark:text-emerald-400 font-extrabold text-xl flex items-center justify-center border border-emerald-300 dark:border-emerald-800 flex-shrink-0">
-                {candidate.name.split(' ').map((n) => n[0]).join('')}
+              <div className="w-14 h-14 rounded-full overflow-hidden bg-emerald-100 dark:bg-emerald-950 text-brand-primary dark:text-emerald-400 font-extrabold text-xl flex items-center justify-center border border-emerald-300 dark:border-emerald-800 flex-shrink-0">
+                {candidate.avatarUrl
+                  ? <img src={candidate.avatarUrl} alt={`${candidate.name} profile`} className="h-full w-full object-cover" />
+                  : candidate.name.split(' ').map((n) => n[0]).join('')}
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
@@ -552,6 +586,8 @@ export default function CandidatePortalPage() {
 
         {/* Pre-departure Checklist */}
         <ChecklistCard />
+          </>
+        )}
       </main>
 
       {/* Hidden file input for document re-upload */}
@@ -567,13 +603,6 @@ export default function CandidatePortalPage() {
       <SignatureModal
         isOpen={isSignatureModalOpen}
         onClose={() => setIsSignatureModalOpen(false)}
-      />
-
-      {/* KYC Submission Modal */}
-      <KycSubmissionModal
-        isOpen={isKycModalOpen}
-        onClose={() => setIsKycModalOpen(false)}
-        candidate={candidate}
       />
 
       {/* Two-Way Document Signing Modal */}

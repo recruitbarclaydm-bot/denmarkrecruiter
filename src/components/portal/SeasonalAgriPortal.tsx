@@ -6,7 +6,6 @@ import { useAuth } from '@/context/AuthContext';
 import { usePortalStore } from '@/context/PortalStoreContext';
 import { useToast } from '@/context/ToastContext';
 import { DocPreviewModal } from '@/components/shared/DocPreviewModal';
-import { KycSubmissionModal } from '@/components/portal/KycSubmissionModal';
 import { DocumentSigningModal } from '@/components/portal/DocumentSigningModal';
 import { generateDocumentPdf } from '@/lib/pdfGenerator';
 import {
@@ -30,19 +29,18 @@ import {
 
 interface SeasonalAgriPortalProps {
   candidate: CandidateRecord;
+  onOpenOnboarding: () => void;
 }
 
-export const SeasonalAgriPortal: React.FC<SeasonalAgriPortalProps> = ({ candidate }) => {
+export const SeasonalAgriPortal: React.FC<SeasonalAgriPortalProps> = ({ candidate, onOpenOnboarding }) => {
   const { logout } = useAuth();
-  const { reuploadDocument } = usePortalStore();
+  const { reuploadDocument, uploadCandidateAvatar } = usePortalStore();
   const { showToast } = useToast();
 
   const [maskPassport, setMaskPassport] = useState(true);
-  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [todayDate, setTodayDate] = useState('');
   const [activeDocForPreview, setActiveDocForPreview] = useState<DocumentRecord | null>(null);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
-  const [isKycModalOpen, setIsKycModalOpen] = useState(false);
   const [docForSigning, setDocForSigning] = useState<DocumentRecord | null>(null);
 
   // Re-upload state
@@ -60,15 +58,6 @@ export const SeasonalAgriPortal: React.FC<SeasonalAgriPortalProps> = ({ candidat
     });
     setTodayDate(formatted);
 
-    // Load saved profile photo from localStorage
-    try {
-      const savedPhoto = localStorage.getItem('nokhaProfilePhoto');
-      if (savedPhoto) {
-        setProfilePhoto(savedPhoto);
-      }
-    } catch (e) {
-      console.warn('Could not read photo from localStorage:', e);
-    }
   }, []);
 
   const copyToClipboard = (text: string, label: string) => {
@@ -76,11 +65,11 @@ export const SeasonalAgriPortal: React.FC<SeasonalAgriPortalProps> = ({ candidat
     showToast(`Copied ${label} to clipboard!`, 'success');
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       showToast('Please select a valid image file (JPG, PNG, WebP).', 'error');
       return;
     }
@@ -90,20 +79,12 @@ export const SeasonalAgriPortal: React.FC<SeasonalAgriPortalProps> = ({ candidat
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      if (dataUrl) {
-        setProfilePhoto(dataUrl);
-        try {
-          localStorage.setItem('nokhaProfilePhoto', dataUrl);
-          showToast('Profile photo updated successfully!', 'success');
-        } catch (err) {
-          console.warn('Could not save photo to localStorage:', err);
-        }
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      await uploadCandidateAvatar(candidate.id, file);
+      showToast('Profile photo updated successfully!', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Unable to upload profile photo.', 'error');
+    }
   };
 
   const handleDownloadDoc = async (doc: DocumentRecord) => {
@@ -229,7 +210,7 @@ export const SeasonalAgriPortal: React.FC<SeasonalAgriPortalProps> = ({ candidat
           </div>
 
           <button
-            onClick={() => setIsKycModalOpen(true)}
+            onClick={onOpenOnboarding}
             className="px-4 py-2 text-xs font-bold rounded-lg bg-[#0b5e4a] hover:bg-[#074737] text-white shadow-sm flex items-center gap-1.5 self-end sm:self-auto flex-shrink-0"
           >
             <ShieldCheck className="w-4 h-4" />
@@ -292,9 +273,9 @@ export const SeasonalAgriPortal: React.FC<SeasonalAgriPortalProps> = ({ candidat
               className="w-24 h-24 rounded-full overflow-hidden border-4 border-[#12876a] bg-slate-200 dark:bg-slate-700 flex items-center justify-center cursor-pointer shadow-md relative"
               title="Click to upload profile photo"
             >
-              {profilePhoto ? (
+              {candidate.avatarUrl ? (
                 <img
-                  src={profilePhoto}
+                  src={candidate.avatarUrl}
                   alt={candidate.name}
                   className="w-full h-full object-cover"
                 />
@@ -312,7 +293,7 @@ export const SeasonalAgriPortal: React.FC<SeasonalAgriPortalProps> = ({ candidat
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp"
               className="hidden"
               onChange={handlePhotoUpload}
             />
@@ -709,13 +690,6 @@ export const SeasonalAgriPortal: React.FC<SeasonalAgriPortalProps> = ({ candidat
         accept="image/*,application/pdf"
         className="hidden"
         onChange={handleFileReuploadChange}
-      />
-
-      {/* KYC Submission Modal */}
-      <KycSubmissionModal
-        isOpen={isKycModalOpen}
-        onClose={() => setIsKycModalOpen(false)}
-        candidate={candidate}
       />
 
       {/* Two-Way Document Signing Modal */}

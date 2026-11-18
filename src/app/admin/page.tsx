@@ -126,6 +126,7 @@ export default function AdminPage() {
 
   // Active Document for Center Pane
   const activeDoc = activeCandidate.documents.find((d) => d.id === selectedDocId) || activeCandidate.documents[0];
+  const extendedKyc = activeCandidate.extendedKyc || {};
 
   // Candidates filtering
   const filteredCandidates = candidates.filter((c) => {
@@ -484,12 +485,17 @@ export default function AdminPage() {
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 truncate">
-                          {c.name}
+                      <div className="flex min-w-0 items-center gap-2">
+                        <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-800">
+                          {c.avatarUrl ? <img src={c.avatarUrl} alt={`${c.name} biometric avatar`} className="h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center text-[10px] font-bold text-slate-500">{c.name.split(' ').map((part) => part[0]).join('')}</span>}
                         </div>
-                        <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                          {c.passportNumber} &middot; {c.employer?.sponsorCode || c.siriCaseOrder?.caseOrderId}
+                        <div className="min-w-0">
+                          <div className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 truncate">
+                            {c.name}
+                          </div>
+                          <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                            {c.passportNumber} &middot; {c.employer?.sponsorCode || c.siriCaseOrder?.caseOrderId}
+                          </div>
                         </div>
                       </div>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex-shrink-0">
@@ -643,7 +649,7 @@ export default function AdminPage() {
             {/* Split Screen KYC vs. Document Inspector */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
               {/* KYC Profile Column (5 cols) */}
-              <div className="md:col-span-5 bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 space-y-3">
+              <div className="md:col-span-5 max-h-[760px] overflow-y-auto bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 space-y-3">
                 <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
                   <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider flex items-center gap-1.5">
                     <UserCheck className="w-4 h-4 text-brand-primary" />
@@ -665,6 +671,17 @@ export default function AdminPage() {
                 </div>
 
                 <div className="space-y-2 text-xs">
+                  <div className="flex items-center gap-3 rounded-md bg-slate-50 p-2 dark:bg-slate-800/60">
+                    <div className="h-20 w-16 shrink-0 overflow-hidden rounded border border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
+                      {activeCandidate.avatarUrl
+                        ? <img src={activeCandidate.avatarUrl} alt={`${activeCandidate.name} biometric avatar`} className="h-full w-full object-cover" />
+                        : <div className="flex h-full items-center justify-center text-[10px] text-slate-500">No photo</div>}
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase block font-semibold">Biometric Profile Photo</span>
+                      <span className="text-[11px] text-slate-700 dark:text-slate-300">{activeCandidate.avatarStoragePath ? 'Private dossier image' : 'Not uploaded'}</span>
+                    </div>
+                  </div>
                   <div>
                     <span className="text-[10px] text-slate-400 uppercase block font-semibold">Legal Full Name</span>
                     <span className="font-semibold text-slate-800 dark:text-slate-200">{activeCandidate.name}</span>
@@ -690,6 +707,22 @@ export default function AdminPage() {
                   <div>
                     <span className="text-[10px] text-slate-400 uppercase block font-semibold">Contact Mobile</span>
                     <span className="font-mono text-slate-800 dark:text-slate-200">{activeCandidate.phone}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 border-y border-slate-100 py-2 dark:border-slate-800">
+                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Father&apos;s Name</span><span>{extendedKyc.father_name || 'N/A'}</span></div>
+                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Mother&apos;s Name</span><span>{extendedKyc.mother_name || 'N/A'}</span></div>
+                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Marital Status</span><span>{extendedKyc.marital_status || 'N/A'}</span></div>
+                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Gender</span><span>{extendedKyc.gender || 'N/A'}</span></div>
+                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Citizenship / Nagarikta No.</span><span className="break-all font-mono">{extendedKyc.citizenship_number || 'N/A'}</span></div>
+                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">NIN</span><span className="break-all font-mono">{extendedKyc.national_id_nin || 'N/A'}</span></div>
+                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Passport Issue Date</span><span>{extendedKyc.passport_issue_date || 'N/A'}</span></div>
+                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Passport Issue Place</span><span>{extendedKyc.passport_issue_place || 'N/A'}</span></div>
+                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Emergency Contact</span><span>{extendedKyc.emergency_contact_name || 'N/A'}{extendedKyc.emergency_contact_relation ? ` (${extendedKyc.emergency_contact_relation})` : ''}</span></div>
+                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Emergency Phone</span><span className="break-all font-mono">{extendedKyc.emergency_contact_phone || 'N/A'}</span></div>
+                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Education</span><span>{extendedKyc.education_level || 'N/A'}</span></div>
+                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Relevant Experience</span><span>{extendedKyc.work_experience_years ? `${extendedKyc.work_experience_years} years` : 'N/A'}</span></div>
+                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Previous Schengen Visa</span><span>{extendedKyc.previous_schengen_visa || 'N/A'}</span></div>
+                    <div className="col-span-2"><span className="text-[9px] text-slate-400 uppercase block font-semibold">Work Skills Summary</span><span className="whitespace-pre-wrap">{extendedKyc.work_skills_summary || activeCandidate.workExperienceSummary || 'N/A'}</span></div>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-400 uppercase block font-semibold">Work Experience / Skills</span>

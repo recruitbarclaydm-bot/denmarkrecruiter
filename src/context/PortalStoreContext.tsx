@@ -10,6 +10,7 @@ import {
   AuditLogEntry,
   NotificationItem,
   NewCandidateInput,
+  NepalKycDetails,
 } from '@/types';
 import { INITIAL_CANDIDATES } from '@/data/mockUsers';
 import { createEphemeralSupabaseClient, getSignedDocumentUrl, supabase } from '@/lib/supabase';
@@ -20,6 +21,8 @@ interface PortalStoreContextType {
   selectedCandidate: CandidateRecord | null;
   isInitialized: boolean;
   refreshStore: () => Promise<void>;
+  uploadCandidateAvatar: (candidateId: string, file: File) => Promise<void>;
+  uploadCoreDocument: (candidateId: string, name: string, category: string, file: File, existingDocumentId?: string) => Promise<void>;
   selectCandidate: (id: string) => void;
   approveAccount: (candidateId: string, sponsorCode?: string, caseOrderId?: string, actor?: string) => void;
   rejectAccount: (candidateId: string, reason: string, actor?: string) => void;
@@ -49,7 +52,7 @@ interface PortalStoreContextType {
   ) => void;
   approveKyc: (candidateId: string, actor?: string) => void;
   rejectKyc: (candidateId: string, note: string, actor?: string) => void;
-  updateCandidateKyc: (candidateId: string, data: Partial<CandidateRecord>) => void;
+  updateCandidateKyc: (candidateId: string, data: Partial<CandidateRecord>) => Promise<void>;
   setCandidateStage: (
     candidateId: string,
     stage: StageNumber,
@@ -68,6 +71,28 @@ const PortalStoreContext = createContext<PortalStoreContextType | undefined>(und
 
 type CandidateRow = Record<string, any>;
 type DocumentRow = Record<string, any>;
+
+const serializeKycNote = (candidate: CandidateRecord) => JSON.stringify({
+  schema: 'siri_kyc_v1',
+  rejectionNote: candidate.kycNote || '',
+  extended: candidate.extendedKyc || {},
+});
+
+const parseKycNote = (rawValue: unknown): { rejectionNote: string; extended: Partial<NepalKycDetails> } => {
+  if (typeof rawValue !== 'string' || !rawValue) return { rejectionNote: '', extended: {} };
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (parsed?.schema === 'siri_kyc_v1') {
+      return {
+        rejectionNote: typeof parsed.rejectionNote === 'string' ? parsed.rejectionNote : '',
+        extended: parsed.extended && typeof parsed.extended === 'object' ? parsed.extended : {},
+      };
+    }
+  } catch {
+    return { rejectionNote: rawValue, extended: {} };
+  }
+  return { rejectionNote: rawValue, extended: {} };
+};
 
 const toUiDocumentStatus = (status: string): DocumentRecord['status'] => {
   if (status === 'awaiting_signature') return 'action_required';
@@ -92,7 +117,8 @@ const toCandidateRow = (candidate: CandidateRecord) => ({
   role: 'candidate',
   account_status: candidate.accountStatus,
   kyc_status: candidate.kycStatus,
-  kyc_note: candidate.kycNote || '',
+  kyc_note: serializeKycNote(candidate),
+  avatar_url: candidate.avatarStoragePath || null,
   current_stage: candidate.currentStage,
   passport_number: candidate.passportNumber,
   passport_expiry: candidate.passportExpiry || null,
@@ -238,6 +264,9 @@ const mapCandidateRow = async (
   );
 
   const stage = Math.min(6, Math.max(1, Number(row.current_stage) || 1)) as StageNumber;
+  const kycData = parseKycNote(row.kyc_note);
+  const avatarStoragePath = row.avatar_url || undefined;
+  const avatarUrl = avatarStoragePath ? await getSignedDocumentUrl(avatarStoragePath) : undefined;
   const checklistLog = auditLogs.find((item) => item.action === 'Checklist State');
   let checklist = base.checklist;
   if (checklistLog) {
@@ -278,7 +307,10 @@ const mapCandidateRow = async (
     accountStatus: row.account_status,
     accountRejectionReason: row.account_status === 'rejected' ? row.kyc_note || undefined : undefined,
     kycStatus: row.kyc_status,
-    kycNote: row.kyc_note || '',
+    kycNote: kycData.rejectionNote,
+    extendedKyc: kycData.extended,
+    avatarUrl,
+    avatarStoragePath,
     employer: { ...base.employer, name: row.employer_name || base.employer.name, sponsorCode: row.sponsor_code || '' },
     siriCaseOrder: { ...base.siriCaseOrder, caseOrderId: row.case_order_id || '' },
     denbarAccount: row.denbar_balance
@@ -398,7 +430,7 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return () => subscription.unsubscribe();
   }, [refreshStore]);
 
-  const saveToStorage = (updated: CandidateRecord[]): Promise<void> => {
+  const saveToStorage = (updated: CandidateRecord[], propagateError = false): Promise<void> => {
     const previous = candidatesRef.current;
     candidatesRef.current = updated;
     setCandidates(updated);
@@ -411,7 +443,113 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
       candidate
     ))).then(() => refreshStore()).catch((error) => {
       console.error('Unable to save portal changes to Supabase:', error);
+      if (propagateError) throw error;
     });
+  };
+
+  const uploadCandidateAvatar = async (candidateId: string, file: File) => {
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      throw new Error('Choose a JPG, PNG, or WEBP image.');
+    }
+    if (file.size > 5 * 1024 * 1024) throw new Error('Profile photo must be 5MB or smaller.');
+
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storagePath = `${candidateId}/avatar_${Date.now()}_${safeName}`;
+    const { error: uploadError } = await supabase.storage.from('dossier-documents').upload(storagePath, file, {
+      contentType: file.type,
+      upsert: false,
+    });
+    if (uploadError) throw uploadError;
+
+    const { error: profileError } = await supabase.from('candidates')
+      .update({ avatar_url: storagePath })
+      .eq('id', candidateId);
+    if (profileError) {
+      await supabase.storage.from('dossier-documents').remove([storagePath]);
+      throw profileError;
+    }
+
+    const candidate = candidatesRef.current.find((item) => item.id === candidateId);
+    const actor = candidate?.name || 'Candidate';
+    const { error: auditError } = await supabase.from('audit_logs').insert({
+      candidate_id: candidateId,
+      actor: `${actor} (Applicant)`,
+      action: 'Biometric Avatar Uploaded',
+      details: 'Candidate uploaded a passport-style profile photo.',
+    });
+    if (auditError) throw auditError;
+
+    const signedUrl = await getSignedDocumentUrl(storagePath);
+    const updated = candidatesRef.current.map((item) => item.id === candidateId
+      ? {
+          ...item,
+          avatarStoragePath: storagePath,
+          avatarUrl: signedUrl,
+          auditLog: [{
+            id: `avatar_${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            actor: `${actor} (Applicant)`,
+            action: 'Biometric Avatar Uploaded',
+            details: 'Candidate uploaded a passport-style profile photo.',
+          }, ...item.auditLog],
+        }
+      : item);
+    candidatesRef.current = updated;
+    setCandidates(updated);
+  };
+
+  const uploadCoreDocument = async (
+    candidateId: string,
+    name: string,
+    category: string,
+    file: File,
+    existingDocumentId?: string
+  ) => {
+    if (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.type)) {
+      throw new Error('Choose a PDF, JPG, or PNG document.');
+    }
+    if (file.size > 10 * 1024 * 1024) throw new Error('Document must be 10MB or smaller.');
+
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storagePath = `${candidateId}/${Date.now()}_${safeName}`;
+    const { error: uploadError } = await supabase.storage.from('dossier-documents').upload(storagePath, file, {
+      contentType: file.type,
+      upsert: false,
+    });
+    if (uploadError) throw uploadError;
+
+    const candidate = candidatesRef.current.find((item) => item.id === candidateId);
+    const existing = candidate?.documents.find((document) => document.id === existingDocumentId) || candidate?.documents.find((document) =>
+      document.title.toLowerCase() === name.toLowerCase() || document.category?.toLowerCase() === category.toLowerCase()
+    );
+    const row = {
+      candidate_id: candidateId,
+      name,
+      category,
+      direction: 'candidate_upload',
+      requires_signature: false,
+      status: 'pending',
+      rejection_reason: null,
+      storage_path: storagePath,
+      signature_data: null,
+      uploaded_at: new Date().toISOString(),
+    };
+    const documentResult = existing && /^[0-9a-f-]{36}$/i.test(existing.id)
+      ? await supabase.from('dossier_documents').update(row).eq('id', existing.id)
+      : await supabase.from('dossier_documents').insert(row);
+    if (documentResult.error) {
+      await supabase.storage.from('dossier-documents').remove([storagePath]);
+      throw documentResult.error;
+    }
+
+    const { error: auditError } = await supabase.from('audit_logs').insert({
+      candidate_id: candidateId,
+      actor: `${candidate?.name || 'Candidate'} (Applicant)`,
+      action: 'Core Document Uploaded',
+      details: `Uploaded ${name} (${file.name}) for caseworker review.`,
+    });
+    if (auditError) throw auditError;
+    await refreshStore();
   };
 
   const selectCandidate = useCallback((id: string) => {
@@ -830,7 +968,7 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   // Candidate updates their personal KYC data
-  const updateCandidateKyc = (candidateId: string, data: Partial<CandidateRecord>) => {
+  const updateCandidateKyc = async (candidateId: string, data: Partial<CandidateRecord>) => {
     const updated = candidates.map((c) => {
       if (c.id === candidateId) {
         const notif = pushNotification(
@@ -854,7 +992,7 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
       return c;
     });
-    saveToStorage(updated);
+    await saveToStorage(updated, true);
   };
 
   // Gated Stage Controller
@@ -865,6 +1003,18 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
   ): { success: boolean; reason?: string } => {
     const candidate = candidates.find((c) => c.id === candidateId);
     if (!candidate) return { success: false, reason: 'Candidate not found.' };
+
+    if (stage >= 4) {
+      const policeClearance = candidate.documents.find((document) =>
+        document.title.toLowerCase().includes('police') || document.title.toLowerCase().includes('pcc')
+      );
+      if (!policeClearance?.storagePath || policeClearance.status !== 'verified') {
+        return {
+          success: false,
+          reason: 'Stage 4/5 clearance is locked until a real Nepal Police Clearance Certificate is uploaded and verified.',
+        };
+      }
+    }
 
     // Stage 5 Gatekeeper: Check that KYC is verified and core documents are approved
     if (stage >= 5) {
@@ -1227,6 +1377,8 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
         selectedCandidate,
         isInitialized,
         refreshStore,
+        uploadCandidateAvatar,
+        uploadCoreDocument,
         selectCandidate,
         approveAccount,
         rejectAccount,

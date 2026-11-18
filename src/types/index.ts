@@ -106,6 +106,24 @@ export interface CandidateEmployer {
   workingHours: string;
 }
 
+export interface NepalKycDetails {
+  father_name: string;
+  mother_name: string;
+  marital_status: string;
+  gender: string;
+  citizenship_number: string;
+  national_id_nin: string;
+  passport_issue_date: string;
+  passport_issue_place: string;
+  emergency_contact_name: string;
+  emergency_contact_relation: string;
+  emergency_contact_phone: string;
+  education_level: string;
+  work_experience_years: string;
+  work_skills_summary: string;
+  previous_schengen_visa: string;
+}
+
 export interface CandidateRecord {
   id: string;
   email: string;
@@ -127,6 +145,9 @@ export interface CandidateRecord {
   checklist: ChecklistItem[];
   signatureDataUrl?: string;
   signatureTimestamp?: string;
+  avatarUrl?: string;
+  avatarStoragePath?: string;
+  extendedKyc?: Partial<NepalKycDetails>;
   schemeType?: SchemeType;
   contractDuration?: string;
   statusBadgeText?: string;
