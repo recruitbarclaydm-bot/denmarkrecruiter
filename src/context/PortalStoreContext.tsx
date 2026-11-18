@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
   CandidateRecord,
   DocumentRecord,
@@ -12,12 +12,14 @@ import {
   NewCandidateInput,
 } from '@/types';
 import { INITIAL_CANDIDATES } from '@/data/mockUsers';
+import { createEphemeralSupabaseClient, getSignedDocumentUrl, supabase } from '@/lib/supabase';
 
 interface PortalStoreContextType {
   candidates: CandidateRecord[];
   selectedCandidateId: string;
   selectedCandidate: CandidateRecord | null;
   isInitialized: boolean;
+  refreshStore: () => Promise<void>;
   selectCandidate: (id: string) => void;
   approveAccount: (candidateId: string, sponsorCode?: string, caseOrderId?: string, actor?: string) => void;
   rejectAccount: (candidateId: string, reason: string, actor?: string) => void;
@@ -53,7 +55,7 @@ interface PortalStoreContextType {
     stage: StageNumber,
     actor?: string
   ) => { success: boolean; reason?: string };
-  registerCandidate: (data: NewCandidateInput) => CandidateRecord;
+  registerCandidate: (data: NewCandidateInput, useEphemeralClient?: boolean) => Promise<CandidateRecord>;
   markNotificationRead: (candidateId: string, notifId: string) => void;
   markAllNotificationsRead: (candidateId: string) => void;
   saveCandidateSignature: (candidateId: string, signatureDataUrl: string) => void;
@@ -64,65 +66,357 @@ interface PortalStoreContextType {
 
 const PortalStoreContext = createContext<PortalStoreContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'siri_portal_store_v2';
+type CandidateRow = Record<string, any>;
+type DocumentRow = Record<string, any>;
+
+const toUiDocumentStatus = (status: string): DocumentRecord['status'] => {
+  if (status === 'awaiting_signature') return 'action_required';
+  if (status === 'signed_pending_review') return 'signed_pending_review';
+  if (status === 'rejected') return 'rejected';
+  if (status === 'verified') return 'verified';
+  return 'pending';
+};
+
+const toDatabaseDocumentStatus = (document: DocumentRecord) => {
+  if (document.status === 'verified') return 'verified';
+  if (document.status === 'rejected' || document.status === 'flagged') return 'rejected';
+  if (document.status === 'signed_pending_review') return 'signed_pending_review';
+  if (document.status === 'action_required' && document.requiresSignature) return 'awaiting_signature';
+  return 'pending';
+};
+
+const toCandidateRow = (candidate: CandidateRecord) => ({
+  id: candidate.id,
+  email: candidate.email,
+  full_name: candidate.name,
+  role: 'candidate',
+  account_status: candidate.accountStatus,
+  kyc_status: candidate.kycStatus,
+  kyc_note: candidate.kycNote || '',
+  current_stage: candidate.currentStage,
+  passport_number: candidate.passportNumber,
+  passport_expiry: candidate.passportExpiry || null,
+  dob: candidate.dob,
+  nationality: candidate.nationality,
+  address: candidate.permanentAddress,
+  phone: candidate.phone,
+  scheme: candidate.schemeType || null,
+  sponsor_code: candidate.employer?.sponsorCode || null,
+  case_order_id: candidate.siriCaseOrder?.caseOrderId || null,
+  employer_name: candidate.employer?.name || null,
+  denbar_balance: candidate.denbarAccount?.amount?.replace(/[^0-9.]/g, '') || null,
+  subscription_status: candidate.actionRequired?.subscription || candidate.denbarAccount?.status || null,
+});
+
+const toDocumentRow = (candidateId: string, document: DocumentRecord, storagePath?: string) => ({
+  candidate_id: candidateId,
+  name: document.title || document.name || document.filename,
+  category: document.category || 'General',
+  direction: document.isDispatchedByAdmin ? 'admin_dispatched' : 'candidate_upload',
+  requires_signature: Boolean(document.requiresSignature),
+  status: toDatabaseDocumentStatus(document),
+  rejection_reason: document.rejectionReason || null,
+  storage_path: storagePath || document.storagePath || null,
+  signature_data: document.signatureDataUrl || null,
+  uploaded_at: document.uploadedAt || new Date().toISOString(),
+});
+
+const uploadDocumentData = async (
+  candidateId: string,
+  fileName: string,
+  fileData?: string,
+  isAdminUpload = false,
+  pathPrefix = ''
+) => {
+  if (!fileData) return undefined;
+  const blob = fileData.startsWith('data:')
+    ? await (await fetch(fileData)).blob()
+    : new Blob([Uint8Array.from(atob(fileData), (character) => character.charCodeAt(0))]);
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const storagePath = `${candidateId}/${isAdminUpload ? 'admin_' : pathPrefix}${Date.now()}_${safeName}`;
+  const { error } = await supabase.storage.from('dossier-documents').upload(storagePath, blob, {
+    contentType: blob.type || 'application/octet-stream',
+    upsert: false,
+  });
+  if (error) throw error;
+  return storagePath;
+};
+
+const persistCandidateDiff = async (previous: CandidateRecord | undefined, candidate: CandidateRecord) => {
+  const profileResult = previous
+    ? await supabase.from('candidates').update(toCandidateRow(candidate)).eq('id', candidate.id)
+    : await supabase.from('candidates').upsert(toCandidateRow(candidate), { onConflict: 'id' });
+  if (profileResult.error) throw profileResult.error;
+
+  const oldDocuments = new Map((previous?.documents || []).map((document) => [document.id, document]));
+  for (const document of candidate.documents) {
+    const oldDocument = oldDocuments.get(document.id);
+    if (oldDocument && JSON.stringify(oldDocument) === JSON.stringify(document)) continue;
+    const uploadedPath = document.fileData
+      ? await uploadDocumentData(candidate.id, document.filename, document.fileData, document.isDispatchedByAdmin)
+      : undefined;
+    const payload = toDocumentRow(candidate.id, document, uploadedPath);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(document.id);
+    const result = oldDocument && isUuid
+      ? await supabase.from('dossier_documents').update(payload).eq('id', document.id)
+      : await supabase.from('dossier_documents').insert(payload);
+    if (result.error) throw result.error;
+  }
+
+  const oldNotifications = new Map((previous?.notifications || []).map((item) => [item.id, item]));
+  for (const notification of candidate.notifications) {
+    const oldNotification = oldNotifications.get(notification.id);
+    if (oldNotification && oldNotification.read === notification.read) continue;
+    const result = oldNotification
+      ? await supabase.from('notifications').update({ is_read: notification.read }).eq('id', notification.id)
+      : await supabase.from('notifications').insert({
+          candidate_id: candidate.id,
+          title: notification.title,
+          message: notification.message,
+          is_read: notification.read,
+        });
+    if (result.error) throw result.error;
+  }
+
+  const oldLogs = new Set((previous?.auditLog || []).map((item) => item.id));
+  const newLogs = candidate.auditLog.filter((item) => !oldLogs.has(item.id));
+  const signaturePath = candidate.signatureDataUrl && candidate.signatureDataUrl !== previous?.signatureDataUrl
+    ? await uploadDocumentData(candidate.id, 'candidate-signature.png', candidate.signatureDataUrl, false, 'signature_')
+    : undefined;
+  if (newLogs.length) {
+    const { error } = await supabase.from('audit_logs').insert(
+      newLogs.map((item) => ({
+        candidate_id: candidate.id,
+        actor: item.actor,
+        action: item.action,
+        details: item.action === 'Biometric Canvas Signature Recorded' && signaturePath
+          ? JSON.stringify({ storage_path: signaturePath })
+          : item.details,
+      }))
+    );
+    if (error) throw error;
+  }
+};
+
+const mapCandidateRow = async (
+  row: CandidateRow,
+  documents: DocumentRow[],
+  notifications: CandidateRow[],
+  auditLogs: CandidateRow[]
+): Promise<CandidateRecord> => {
+  const template = INITIAL_CANDIDATES.find((candidate) => candidate.email.toLowerCase() === String(row.email).toLowerCase());
+  const base = template || INITIAL_CANDIDATES[row.scheme === 'seasonal_agriculture' ? 1 : 0];
+  const mappedDocuments = await Promise.all(
+    documents.map(async (document) => {
+      const source = base.documents.find((item) =>
+        (item.title || item.name || '').toLowerCase() === String(document.name || '').toLowerCase()
+      );
+      const storagePath = document.storage_path as string | null;
+      const fileUrl = storagePath ? await getSignedDocumentUrl(storagePath) : source?.fileUrl;
+      return {
+        ...(source || {}),
+        id: document.id,
+        key: source?.key || String(document.category || 'document').toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+        title: document.name,
+        name: document.name,
+        filename: storagePath?.split('/').pop()?.replace(/^\d+_/, '') || source?.filename || document.name,
+        category: document.category || source?.category || 'General',
+        date: source?.date || new Date(document.uploaded_at || Date.now()).toLocaleDateString('en-GB'),
+        uploadedAt: document.uploaded_at || source?.uploadedAt,
+        status: toUiDocumentStatus(document.status),
+        rejectionReason: document.rejection_reason || undefined,
+        fileUrl,
+        storagePath: storagePath || undefined,
+        fileData: undefined,
+        isCandidateUpload: document.direction === 'candidate_upload',
+        isDispatchedByAdmin: document.direction === 'admin_dispatched',
+        requiresSignature: Boolean(document.requires_signature),
+        signatureDataUrl: document.signature_data || undefined,
+        body: source?.body || `Submitted document: ${document.name}.`,
+      } as DocumentRecord;
+    })
+  );
+
+  const stage = Math.min(6, Math.max(1, Number(row.current_stage) || 1)) as StageNumber;
+  const checklistLog = auditLogs.find((item) => item.action === 'Checklist State');
+  let checklist = base.checklist;
+  if (checklistLog) {
+    try {
+      checklist = JSON.parse(checklistLog.details);
+    } catch {
+      checklist = base.checklist;
+    }
+  }
+  let signatureDataUrl = base.signatureDataUrl;
+  const signatureLog = auditLogs.find((item) => item.action === 'Biometric Canvas Signature Recorded');
+  if (signatureLog) {
+    try {
+      const signatureDetails = JSON.parse(signatureLog.details);
+      if (signatureDetails.storage_path) signatureDataUrl = await getSignedDocumentUrl(signatureDetails.storage_path);
+    } catch {
+      signatureDataUrl = base.signatureDataUrl;
+    }
+  }
+  return {
+    ...base,
+    id: row.id,
+    email: row.email,
+    name: row.full_name || base.name,
+    password: undefined,
+    passportNumber: row.passport_number || '',
+    passportExpiry: row.passport_expiry || '',
+    dob: row.dob || '',
+    nationality: row.nationality || '',
+    permanentAddress: row.address || '',
+    phone: row.phone || '',
+    schemeType: row.scheme || base.schemeType,
+    currentStage: stage,
+    stages: base.stages.map((item) => ({
+      ...item,
+      status: item.number < stage ? 'completed' : item.number === stage ? 'active' : 'pending',
+    })),
+    accountStatus: row.account_status,
+    accountRejectionReason: row.account_status === 'rejected' ? row.kyc_note || undefined : undefined,
+    kycStatus: row.kyc_status,
+    kycNote: row.kyc_note || '',
+    employer: { ...base.employer, name: row.employer_name || base.employer.name, sponsorCode: row.sponsor_code || '' },
+    siriCaseOrder: { ...base.siriCaseOrder, caseOrderId: row.case_order_id || '' },
+    denbarAccount: row.denbar_balance
+      ? {
+          ...(base.denbarAccount || { vfsFee: 'Fully Sponsored', linkedTo: 'Pending Setup' }),
+          amount: `€${row.denbar_balance}`,
+          status: row.subscription_status || 'Pending',
+        }
+      : base.denbarAccount,
+    actionRequired: row.subscription_status
+      ? {
+          ...(base.actionRequired || { facialTime: '10:00 AM', task: 'Portal Verification' }),
+          subscription: row.subscription_status,
+        }
+      : base.actionRequired,
+    documents: mappedDocuments,
+    checklist,
+    signatureDataUrl,
+    signatureTimestamp: signatureLog?.created_at || base.signatureTimestamp,
+    notifications: notifications.map((item) => ({
+      id: item.id,
+      timestamp: item.created_at,
+      title: item.title,
+      message: item.message,
+      read: Boolean(item.is_read),
+      type: 'info' as const,
+    })),
+    auditLog: auditLogs.map((item) => ({
+      id: item.id,
+      timestamp: item.created_at,
+      actor: item.actor,
+      action: item.action,
+      details: item.details,
+    })),
+  };
+};
 
 export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [candidates, setCandidates] = useState<CandidateRecord[]>(INITIAL_CANDIDATES);
-  const [selectedCandidateId, setSelectedCandidateId] = useState<string>('dipak-karki');
+  const [candidates, setCandidates] = useState<CandidateRecord[]>([]);
+  const candidatesRef = useRef<CandidateRecord[]>([]);
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string>('');
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Initialize and merge store from localStorage
-  useEffect(() => {
+  const refreshStore = useCallback(async () => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed: CandidateRecord[] = JSON.parse(stored);
-        // Ensure core initial candidates exist and merge any schema additions
-        const missing = INITIAL_CANDIDATES.filter(
-          (ic) => !parsed.some((p) => p.id === ic.id || p.email.toLowerCase() === ic.email.toLowerCase())
-        );
-
-        // Also ensure parsed candidates have all modern fields (notifications, accountStatus, etc.)
-        const upgraded = parsed.map((c) => {
-          const matchInitial = INITIAL_CANDIDATES.find((ic) => ic.id === c.id);
-          return {
-            ...c,
-            accountStatus: c.accountStatus || matchInitial?.accountStatus || 'approved',
-            kycStatus: c.kycStatus || matchInitial?.kycStatus || 'submitted',
-            kycNote: c.kycNote ?? matchInitial?.kycNote ?? '',
-            auditLog: c.auditLog || matchInitial?.auditLog || [],
-            notifications: c.notifications || matchInitial?.notifications || [],
-            documents: c.documents || matchInitial?.documents || [],
-          };
-        });
-
-        const merged = [...upgraded, ...missing];
-        setCandidates(merged);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-      } else {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_CANDIDATES));
-        setCandidates(INITIAL_CANDIDATES);
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) {
+        candidatesRef.current = [];
+        setCandidates([]);
+        setSelectedCandidateId('');
+        return;
       }
-    } catch (e) {
-      console.warn('Error reading portal store from localStorage:', e);
-      setCandidates(INITIAL_CANDIDATES);
+
+      const { data: ownProfile, error: profileError } = await supabase
+        .from('candidates')
+        .select('*')
+        .eq('id', authData.user.id)
+        .maybeSingle();
+      if (profileError) throw profileError;
+      if (!ownProfile) {
+        candidatesRef.current = [];
+        setCandidates([]);
+        setSelectedCandidateId('');
+        return;
+      }
+
+      const candidateQuery = supabase.from('candidates').select('*').eq('role', 'candidate');
+      const { data: candidateRows, error: candidatesError } = ownProfile.role === 'admin'
+        ? await candidateQuery.order('created_at', { ascending: false })
+        : await supabase.from('candidates').select('*').eq('id', authData.user.id).eq('role', 'candidate');
+      if (candidatesError) throw candidatesError;
+
+      const rows = candidateRows || [];
+      const candidateIds = rows.map((row) => row.id);
+      if (!candidateIds.length) {
+        candidatesRef.current = [];
+        setCandidates([]);
+        setSelectedCandidateId('');
+        return;
+      }
+
+      const [documentResult, notificationResult, auditResult] = await Promise.all([
+        supabase.from('dossier_documents').select('*').in('candidate_id', candidateIds),
+        supabase.from('notifications').select('*').in('candidate_id', candidateIds).order('created_at', { ascending: false }),
+        supabase.from('audit_logs').select('*').in('candidate_id', candidateIds).order('created_at', { ascending: false }),
+      ]);
+      if (documentResult.error) throw documentResult.error;
+      if (notificationResult.error) throw notificationResult.error;
+      if (auditResult.error) throw auditResult.error;
+
+      const hydrated = await Promise.all(rows.map((row) => mapCandidateRow(
+        row,
+        (documentResult.data || []).filter((item) => item.candidate_id === row.id),
+        (notificationResult.data || []).filter((item) => item.candidate_id === row.id),
+        (auditResult.data || []).filter((item) => item.candidate_id === row.id)
+      )));
+      candidatesRef.current = hydrated;
+      setCandidates(hydrated);
+      setSelectedCandidateId((selectedId) => hydrated.some((candidate) => candidate.id === selectedId)
+        ? selectedId
+        : hydrated[0]?.id || '');
+    } catch (error) {
+      console.error('Unable to load portal data from Supabase:', error);
+      candidatesRef.current = [];
+      setCandidates([]);
     } finally {
       setIsInitialized(true);
     }
   }, []);
 
-  const saveToStorage = (updated: CandidateRecord[]) => {
+  useEffect(() => {
+    void refreshStore();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+      setIsInitialized(false);
+      queueMicrotask(() => void refreshStore());
+    });
+    return () => subscription.unsubscribe();
+  }, [refreshStore]);
+
+  const saveToStorage = (updated: CandidateRecord[]): Promise<void> => {
+    const previous = candidatesRef.current;
+    candidatesRef.current = updated;
     setCandidates(updated);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    } catch (e) {
-      console.warn('Error saving portal store to localStorage:', e);
-    }
+    const changed = updated.filter((candidate) => {
+      const oldCandidate = previous.find((item) => item.id === candidate.id);
+      return !oldCandidate || JSON.stringify(oldCandidate) !== JSON.stringify(candidate);
+    });
+    return Promise.all(changed.map((candidate) => persistCandidateDiff(
+      previous.find((item) => item.id === candidate.id),
+      candidate
+    ))).then(() => refreshStore()).catch((error) => {
+      console.error('Unable to save portal changes to Supabase:', error);
+    });
   };
 
-  const selectCandidate = (id: string) => {
+  const selectCandidate = useCallback((id: string) => {
     setSelectedCandidateId(id);
-  };
+  }, []);
 
   const getCandidateById = (id: string) => {
     return candidates.find((c) => c.id === id);
@@ -166,7 +460,7 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
     caseOrderId?: string,
     actor = 'Morten Nyborg (SIRI Caseworker)'
   ) => {
-    const updated = candidates.map((c) => {
+    const updated = candidatesRef.current.map((c) => {
       if (c.id === candidateId) {
         const notif = pushNotification(
           c,
@@ -184,6 +478,7 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
           ...c,
           accountStatus: 'approved' as AccountStatus,
           accountRejectionReason: undefined,
+          kycNote: '',
           employer: {
             ...c.employer,
             sponsorCode: sponsorCode || c.employer.sponsorCode,
@@ -224,6 +519,7 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
           ...c,
           accountStatus: 'rejected' as AccountStatus,
           accountRejectionReason: reason,
+          kycNote: reason,
           notifications: [notif, ...c.notifications],
           auditLog: [log, ...c.auditLog],
         };
@@ -537,6 +833,12 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const updateCandidateKyc = (candidateId: string, data: Partial<CandidateRecord>) => {
     const updated = candidates.map((c) => {
       if (c.id === candidateId) {
+        const notif = pushNotification(
+          c,
+          'KYC Dossier Updated',
+          'Your updated identity information has been submitted for caseworker review.',
+          'info'
+        );
         const log = createAuditEntry(
           `${c.name} (Applicant)`,
           'KYC Dossier Updated',
@@ -546,6 +848,7 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
           ...c,
           ...data,
           kycStatus: 'submitted' as KycStatus,
+          notifications: [notif, ...c.notifications],
           auditLog: [log, ...c.auditLog],
         };
       }
@@ -565,7 +868,9 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
     // Stage 5 Gatekeeper: Check that KYC is verified and core documents are approved
     if (stage >= 5) {
-      const passportDoc = candidate.documents.find((d) => d.key === 'passport' || d.category?.toLowerCase() === 'identity');
+      const passportDoc = candidate.documents.find((d) =>
+        d.key === 'passport' || d.title.toLowerCase().includes('passport')
+      );
       const passportVerified = passportDoc?.status === 'verified';
       const kycVerified = candidate.kycStatus === 'verified';
 
@@ -615,8 +920,16 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   // Self-Registration Wizard / Admin Manual Registration
-  const registerCandidate = (data: NewCandidateInput): CandidateRecord => {
-    const newId = `cand_${Date.now()}`;
+  const registerCandidate = async (data: NewCandidateInput, useEphemeralClient = false): Promise<CandidateRecord> => {
+    const authClient = useEphemeralClient ? createEphemeralSupabaseClient() : supabase;
+    const { data: authData, error: signUpError } = await authClient.auth.signUp({
+      email: data.email.trim().toLowerCase(),
+      password: data.password || 'Candidate@2026',
+    });
+    if (signUpError) throw signUpError;
+    if (!authData.user) throw new Error('Supabase did not return a user for this registration.');
+
+    const newId = authData.user.id;
     const candidateName = (data.fullName || data.name || 'Candidate').trim();
     const isHerdsman = data.scheme === 'siri_herdsman';
     const caseId = `SB6-${Math.floor(100000 + Math.random() * 900000)}-2026`;
@@ -688,7 +1001,7 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const newCandidate: CandidateRecord = {
       id: newId,
       email: data.email.trim().toLowerCase(),
-      password: data.password || 'Candidate@2026',
+      password: undefined,
       name: candidateName,
       passportNumber: data.passportNumber.trim(),
       passportExpiry: data.passportExpiry || '2032-12-31',
@@ -829,7 +1142,15 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
 
     const updatedList = [newCandidate, ...candidates];
-    saveToStorage(updatedList);
+    candidatesRef.current = updatedList;
+    setCandidates(updatedList);
+    newCandidate.auditLog.unshift(createAuditEntry(
+      `${candidateName} (Applicant)`,
+      'Checklist State',
+      JSON.stringify(newCandidate.checklist)
+    ));
+    await persistCandidateDiff(undefined, newCandidate);
+    await refreshStore();
     return newCandidate;
   };
 
@@ -883,9 +1204,12 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const toggleChecklistItem = (candidateId: string, checkId: string) => {
     const updated = candidates.map((c) => {
       if (c.id === candidateId) {
+        const checklist = c.checklist.map((item) => (item.id === checkId ? { ...item, checked: !item.checked } : item));
+        const log = createAuditEntry(`${c.name} (Applicant)`, 'Checklist State', JSON.stringify(checklist));
         return {
           ...c,
-          checklist: c.checklist.map((chk) => (chk.id === checkId ? { ...chk, checked: !chk.checked } : chk)),
+          checklist,
+          auditLog: [log, ...c.auditLog],
         };
       }
       return c;
@@ -902,6 +1226,7 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
         selectedCandidateId,
         selectedCandidate,
         isInitialized,
+        refreshStore,
         selectCandidate,
         approveAccount,
         rejectAccount,

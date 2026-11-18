@@ -25,6 +25,8 @@ export const DispatchDocModal: React.FC<DispatchDocModalProps> = ({
   const [body, setBody] = useState('');
   const [requiresSignature, setRequiresSignature] = useState(true);
   const [preset, setPreset] = useState('');
+  const [fileName, setFileName] = useState('');
+  const [fileData, setFileData] = useState<string>();
 
   if (!isOpen) return null;
 
@@ -66,9 +68,23 @@ export const DispatchDocModal: React.FC<DispatchDocModalProps> = ({
       return;
     }
 
-    dispatchAdminDocument(candidate.id, title.trim(), category, body.trim(), requiresSignature);
+    dispatchAdminDocument(candidate.id, title.trim(), category, body.trim(), requiresSignature, fileData);
     showToast(`Dispatched "${title}" to ${candidate.name}'s candidate portal.`, 'success');
     onClose();
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('File size must be under 10MB.', 'error');
+      event.target.value = '';
+      return;
+    }
+    setFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => setFileData(reader.result as string);
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -181,6 +197,19 @@ export const DispatchDocModal: React.FC<DispatchDocModalProps> = ({
               required
               className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              Optional Document File
+            </label>
+            <input
+              type="file"
+              accept=".pdf,image/png,image/jpeg"
+              onChange={handleFileUpload}
+              className="text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-100 file:text-blue-800 hover:file:bg-blue-200 cursor-pointer"
+            />
+            {fileName && <div className="text-[10px] text-slate-500 mt-1 font-mono">{fileName}</div>}
           </div>
 
           {/* Actions */}

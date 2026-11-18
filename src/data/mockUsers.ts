@@ -1,21 +1,10 @@
-import { CandidateRecord, User } from '@/types';
-
-export const MOCK_ADMIN_USER: User = {
-  id: 'admin_001',
-  email: 'caseworker@siri.dk',
-  name: 'Morten Nyborg',
-  role: 'admin',
-  department: 'SIRI Green Sector Work Authorization Division · Copenhagen',
-};
-
-export const MOCK_ADMIN_PASSWORD = 'AdminSiri@2026';
+import { CandidateRecord } from '@/types';
 
 export const INITIAL_CANDIDATES: CandidateRecord[] = [
   // Candidate 1: Dipak Karki (Herdsmen & Farm Managers Scheme)
   {
     id: 'dipak-karki',
     email: 'dk3430143@gmail.com',
-    password: 'Dipak@1983',
     name: 'Dipak Karki',
     passportNumber: 'PA4635786',
     passportExpiry: '2032-05-18',
@@ -257,7 +246,6 @@ export const INITIAL_CANDIDATES: CandidateRecord[] = [
   {
     id: 'nokha-adhikari',
     email: 'madanadhikari65@gmail.com',
-    password: 'Nokha@1992',
     name: 'Nokha Nath Adhikari',
     passportNumber: 'PA3880717',
     passportExpiry: '2031-09-20',
@@ -539,7 +527,6 @@ export const INITIAL_CANDIDATES: CandidateRecord[] = [
   {
     id: 'cand_bikash_thapa',
     email: 'bikash.thapa@gmail.com',
-    password: 'Bikash@1988',
     name: 'Bikash Thapa',
     passportNumber: 'PA7819230',
     dob: '04 May 1988',
@@ -595,7 +582,6 @@ export const INITIAL_CANDIDATES: CandidateRecord[] = [
   {
     id: 'cand_sunita_shrestha',
     email: 'sunita.s@gmail.com',
-    password: 'Sunita@1991',
     name: 'Sunita Shrestha',
     passportNumber: 'PA9021482',
     dob: '19 Sep 1991',

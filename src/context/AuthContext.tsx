@@ -3,11 +3,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, CandidateRecord, StageNumber, DocumentStatus, DocumentRecord, Role, AccountStatus } from '@/types';
-import { MOCK_ADMIN_USER, MOCK_ADMIN_PASSWORD } from '@/data/mockUsers';
 import { usePortalStore } from './PortalStoreContext';
+import { supabase } from '@/lib/supabase';
 
 interface AuthContextType {
   user: User | null;
+  isAuthInitialized: boolean;
   candidate: CandidateRecord | null;
   allCandidates: CandidateRecord[];
   login: (
@@ -33,22 +34,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const portalStore = usePortalStore();
 
   const [user, setUser] = useState<User | null>(null);
+  const [isAuthInitialized, setIsAuthInitialized] = useState(false);
 
-  // Restore user session on mount
   useEffect(() => {
-    try {
-      const savedUser = sessionStorage.getItem('siri_auth_user');
-      if (savedUser) {
-        const parsed: User = JSON.parse(savedUser);
-        setUser(parsed);
-        if (parsed.candidateId) {
-          portalStore.selectCandidate(parsed.candidateId);
-        }
+    const loadProfile = async (authUserId: string) => {
+      const { data, error } = await supabase.from('candidates').select('*').eq('id', authUserId).maybeSingle();
+      if (error || !data) {
+        setUser(null);
+        setIsAuthInitialized(true);
+        return;
       }
-    } catch (e) {
-      console.warn('Error reading auth session from sessionStorage:', e);
-    }
-  }, []);
+      const nextUser: User = {
+        id: data.id,
+        email: data.email,
+        name: data.full_name,
+        role: data.role,
+        candidateId: data.role === 'candidate' ? data.id : undefined,
+        department: data.role === 'admin' ? 'SIRI Caseworker Division' : undefined,
+      };
+      setUser(nextUser);
+      setIsAuthInitialized(true);
+      if (nextUser.candidateId) portalStore.selectCandidate(nextUser.candidateId);
+    };
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session?.user.id) void loadProfile(data.session.user.id);
+      else {
+        setUser(null);
+        setIsAuthInitialized(true);
+      }
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      queueMicrotask(() => {
+        if (session?.user.id) void loadProfile(session.user.id);
+        else {
+          setUser(null);
+          setIsAuthInitialized(true);
+        }
+      });
+    });
+    return () => subscription.unsubscribe();
+  }, [portalStore.selectCandidate]);
 
   const login = async (
     email: string,
@@ -56,82 +82,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     roleRestriction?: Role
   ): Promise<{ success: boolean; role?: Role; accountStatus?: AccountStatus; errorReason?: string }> => {
     const cleanEmail = email.trim().toLowerCase();
-    const isAdminCreds = cleanEmail === MOCK_ADMIN_USER.email.toLowerCase() && pass === MOCK_ADMIN_PASSWORD;
-
-    // 1. If portal specifies candidate only
-    if (roleRestriction === 'candidate' && isAdminCreds) {
-      return {
-        success: false,
-        errorReason: 'Administrative staff must log in via the authorized Caseworker gateway.',
-      };
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email: cleanEmail, password: pass });
+    if (authError || !authData.user) {
+      return { success: false, errorReason: 'Invalid credentials. Please verify your email and password.' };
     }
 
-    // 2. If gateway specifies admin only
-    if (roleRestriction === 'admin' && !isAdminCreds) {
-      const candidateCheck = portalStore.candidates.find((c) => c.email.toLowerCase() === cleanEmail);
-      if (candidateCheck) {
-        return {
-          success: false,
-          errorReason: 'Candidate accounts cannot access the administrative console. Please use the candidate portal.',
-        };
-      }
-      return {
-        success: false,
-        errorReason: 'Invalid administrative staff credentials.',
-      };
+    const { data: profile, error: profileError } = await supabase
+      .from('candidates')
+      .select('*')
+      .eq('id', authData.user.id)
+      .maybeSingle();
+    if (profileError || !profile || (profile.role !== 'candidate' && profile.role !== 'admin')) {
+      await supabase.auth.signOut();
+      return { success: false, errorReason: 'Unable to verify this account profile.' };
     }
 
-    // 3. Admin Login Execution
-    if (isAdminCreds) {
-      const adminUser: User = MOCK_ADMIN_USER;
-      setUser(adminUser);
-      sessionStorage.setItem('siri_auth_user', JSON.stringify(adminUser));
-      return { success: true, role: 'admin' };
+    if (roleRestriction && profile.role !== roleRestriction) {
+      await supabase.auth.signOut();
+      const errorReason = profile.role === 'admin'
+        ? 'Administrative staff must sign in via the authorized Caseworker gateway.'
+        : 'Candidate accounts cannot access the administrative console. Please use the candidate portal.';
+      return { success: false, errorReason };
     }
 
-    // 4. Candidate Login Execution
-    const matchedCandidate = portalStore.candidates.find((c) => c.email.toLowerCase() === cleanEmail);
-    if (matchedCandidate) {
-      let valid = false;
-      if (matchedCandidate.password && pass === matchedCandidate.password) {
-        valid = true;
-      } else if (cleanEmail === 'dk3430143@gmail.com' && (pass === 'Dipak@1983' || pass === 'dipak1983')) {
-        valid = true;
-      } else if (cleanEmail === 'madanadhikari65@gmail.com' && (pass === 'Nokha@1992' || pass === 'nokha1992')) {
-        valid = true;
-      } else if (cleanEmail.includes('thapa') && pass === 'Bikash@1988') {
-        valid = true;
-      } else if (cleanEmail.includes('sunita') && pass === 'Sunita@1991') {
-        valid = true;
-      } else if (pass.length >= 4 && (!matchedCandidate.password || pass === matchedCandidate.password)) {
-        valid = true;
-      }
-
-      if (valid) {
-        const candidateUser: User = {
-          id: `user_${matchedCandidate.id}`,
-          email: matchedCandidate.email,
-          name: matchedCandidate.name,
-          role: 'candidate',
-          candidateId: matchedCandidate.id,
-        };
-        setUser(candidateUser);
-        portalStore.selectCandidate(matchedCandidate.id);
-        sessionStorage.setItem('siri_auth_user', JSON.stringify(candidateUser));
-        return {
-          success: true,
-          role: 'candidate',
-          accountStatus: matchedCandidate.accountStatus,
-        };
-      }
-    }
-
-    return { success: false, errorReason: 'Invalid credentials. Please verify your email and password.' };
+    const signedInUser: User = {
+      id: profile.id,
+      email: profile.email,
+      name: profile.full_name,
+      role: profile.role,
+      candidateId: profile.role === 'candidate' ? profile.id : undefined,
+      department: profile.role === 'admin' ? 'SIRI Caseworker Division' : undefined,
+    };
+    setUser(signedInUser);
+    if (signedInUser.candidateId) portalStore.selectCandidate(signedInUser.candidateId);
+    await portalStore.refreshStore();
+    return { success: true, role: profile.role, accountStatus: profile.account_status };
   };
 
   const logout = () => {
     setUser(null);
-    sessionStorage.removeItem('siri_auth_user');
+    void supabase.auth.signOut();
     router.push('/');
   };
 
@@ -193,6 +183,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider
       value={{
         user,
+        isAuthInitialized,
         candidate: activeCandidate,
         allCandidates: portalStore.candidates,
         login,

@@ -54,6 +54,7 @@ export interface DocumentRecord {
   status: DocumentStatus;
   rejectionReason?: string;
   fileUrl?: string;
+  storagePath?: string;
   uploadedAt?: string;
   isCandidateUpload?: boolean;
   category?: string;

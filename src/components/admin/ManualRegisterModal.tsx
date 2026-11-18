@@ -34,39 +34,43 @@ export const ManualRegisterModal: React.FC<ManualRegisterModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim() || !email.trim() || !passportNumber.trim()) {
       showToast('Name, Email, and Passport Number are required.', 'error');
       return;
     }
 
-    const newCandidate = registerCandidate({
-      fullName: fullName.trim(),
-      email: email.trim().toLowerCase(),
-      password: password.trim(),
-      passportNumber: passportNumber.trim().toUpperCase(),
-      dob,
-      passportExpiry,
-      nationality,
-      phone,
-      permanentAddress,
-      scheme,
-      sponsorCode: sponsorCode.trim(),
-      cvrNumber: cvrNumber.trim(),
-    });
+    try {
+      const newCandidate = await registerCandidate({
+        fullName: fullName.trim(),
+        email: email.trim().toLowerCase(),
+        password: password.trim(),
+        passportNumber: passportNumber.trim().toUpperCase(),
+        dob,
+        passportExpiry,
+        nationality,
+        phone,
+        permanentAddress,
+        scheme,
+        sponsorCode: sponsorCode.trim(),
+        cvrNumber: cvrNumber.trim(),
+      }, true);
 
-    if (autoApprove) {
-      approveAccount(
-        newCandidate.id,
-        sponsorCode.trim(),
-        `SB6-${Math.floor(100000 + Math.random() * 900000)}-2026`,
-        'Caseworker Manual Onboarding'
-      );
+      if (autoApprove) {
+        approveAccount(
+          newCandidate.id,
+          sponsorCode.trim(),
+          `SB6-${Math.floor(100000 + Math.random() * 900000)}-2026`,
+          'Caseworker Manual Onboarding'
+        );
+      }
+
+      showToast(`Registered and onboarded candidate ${newCandidate.name} successfully.`, 'success');
+      onClose();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Unable to create candidate account.', 'error');
     }
-
-    showToast(`Registered and onboarded candidate ${newCandidate.name} successfully.`, 'success');
-    onClose();
   };
 
   return (

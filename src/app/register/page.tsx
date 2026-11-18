@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { usePortalStore } from '@/context/PortalStoreContext';
-import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { Header } from '@/components/shared/Header';
 import {
@@ -27,7 +26,6 @@ import {
 export default function CandidateRegisterPage() {
   const router = useRouter();
   const portalStore = usePortalStore();
-  const { login } = useAuth();
   const { showToast } = useToast();
 
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
@@ -115,7 +113,7 @@ export default function CandidateRegisterPage() {
 
     setIsSubmitting(true);
     try {
-      const newCand = portalStore.registerCandidate({
+      await portalStore.registerCandidate({
         name: fullName,
         email,
         password,
@@ -132,12 +130,10 @@ export default function CandidateRegisterPage() {
         cvData,
       });
 
-      // Log in session for the new candidate
-      await login(email, password, 'candidate');
       showToast('Registration submitted successfully! Dossier is under review.', 'success');
       router.push('/pending-approval');
     } catch (err) {
-      showToast('Error during registration. Please check your data.', 'error');
+      showToast(err instanceof Error ? err.message : 'Error during registration. Please check your data.', 'error');
     } finally {
       setIsSubmitting(false);
     }

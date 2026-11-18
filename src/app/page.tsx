@@ -25,6 +25,7 @@ export default function CandidateLoginPage() {
 
   // If already logged in
   useEffect(() => {
+    if (!portalStore.isInitialized) return;
     if (user) {
       if (user.role === 'admin') {
         router.push('/admin');
@@ -37,7 +38,7 @@ export default function CandidateLoginPage() {
         }
       }
     }
-  }, [user, portalStore.candidates, router]);
+  }, [user, portalStore.candidates, portalStore.isInitialized, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -11,6 +11,8 @@ import { DocPreviewModal } from '@/components/shared/DocPreviewModal';
 import { DispatchDocModal } from '@/components/admin/DispatchDocModal';
 import { ManualRegisterModal } from '@/components/admin/ManualRegisterModal';
 import { generateDocumentPdf } from '@/lib/pdfGenerator';
+import { seedDipakAndNokha } from '@/lib/cloudSeeder';
+import { INITIAL_CANDIDATES } from '@/data/mockUsers';
 import { DocumentRecord, StageNumber, DocumentStatus, AccountStatus, KycStatus } from '@/types';
 import {
   Search,
@@ -44,9 +46,10 @@ import {
 
 export default function AdminPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isAuthInitialized } = useAuth();
   const {
     candidates,
+    isInitialized,
     selectedCandidateId,
     selectCandidate,
     approveAccount,
@@ -56,12 +59,13 @@ export default function AdminPage() {
     approveKyc,
     rejectKyc,
     setCandidateStage,
+    refreshStore,
   } = usePortalStore();
   const { t } = useLanguage();
   const { showToast } = useToast();
 
   // Selected candidate from store
-  const activeCandidate = candidates.find((c) => c.id === selectedCandidateId) || candidates[0];
+  const activeCandidate = candidates.find((c) => c.id === selectedCandidateId) || candidates[0] || INITIAL_CANDIDATES[0];
 
   // UI States
   const [searchQuery, setSearchQuery] = useState('');
@@ -76,6 +80,10 @@ export default function AdminPage() {
   // Modal States
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [isSeedFormOpen, setIsSeedFormOpen] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
+  const [dipakSeedPassword, setDipakSeedPassword] = useState('');
+  const [nokhaSeedPassword, setNokhaSeedPassword] = useState('');
   const [isRejectDocModalOpen, setIsRejectDocModalOpen] = useState(false);
   const [rejectDocReason, setRejectDocReason] = useState('Blurry or illegible scan');
   const [customRejectDocReason, setCustomRejectDocReason] = useState('');
@@ -92,10 +100,10 @@ export default function AdminPage() {
 
   // Admin Guard
   useEffect(() => {
-    if (!user || user.role !== 'admin') {
+    if (isAuthInitialized && (!user || user.role !== 'admin')) {
       router.push('/admin/login');
     }
-  }, [user, router]);
+  }, [user, isAuthInitialized, router]);
 
   // Sync inputs on candidate switch
   useEffect(() => {
@@ -110,7 +118,11 @@ export default function AdminPage() {
     }
   }, [selectedCandidateId, activeCandidate?.id]);
 
-  if (!user || user.role !== 'admin' || !activeCandidate) return null;
+  const needsSeed = ['dk3430143@gmail.com', 'madanadhikari65@gmail.com'].some(
+    (email) => !candidates.some((candidate) => candidate.email.toLowerCase() === email)
+  );
+
+  if (!isAuthInitialized || !isInitialized || !user || user.role !== 'admin') return null;
 
   // Active Document for Center Pane
   const activeDoc = activeCandidate.documents.find((d) => d.id === selectedDocId) || activeCandidate.documents[0];
@@ -232,6 +244,29 @@ export default function AdminPage() {
     showToast(`Downloaded: ${doc.title}.pdf`, 'success');
   };
 
+  const handleSeedCandidates = async () => {
+    if (!dipakSeedPassword || !nokhaSeedPassword) {
+      showToast('Enter both candidate passwords to seed their cloud accounts.', 'error');
+      return;
+    }
+    setIsSeeding(true);
+    try {
+      await seedDipakAndNokha({
+        'dk3430143@gmail.com': dipakSeedPassword,
+        'madanadhikari65@gmail.com': nokhaSeedPassword,
+      });
+      await refreshStore();
+      setIsSeedFormOpen(false);
+      setDipakSeedPassword('');
+      setNokhaSeedPassword('');
+      showToast('Dipak and Nokha are synced to Supabase Cloud.', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Cloud seeding failed.', 'error');
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
   // WhatsApp Alert Generator
   const handleSendWhatsAppAlert = () => {
     const cleanPhone = (activeCandidate.phone || '').replace(/[^0-9]/g, '');
@@ -244,6 +279,59 @@ export default function AdminPage() {
     const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
     window.open(waUrl, '_blank');
   };
+
+  if (!candidates.length) {
+    return (
+      <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex flex-col transition-colors">
+        <Header />
+        <main className="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 py-6 space-y-5">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 rounded-xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div>
+              <h1 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
+                SIRI Caseworker Workspace
+              </h1>
+              <p className="text-xs text-slate-500 mt-1">No candidate records are currently available in the cloud.</p>
+            </div>
+            {needsSeed && (
+              <button
+                onClick={() => setIsSeedFormOpen((open) => !open)}
+                className="px-3.5 py-2 text-xs font-bold rounded-lg bg-sky-700 hover:bg-sky-800 text-white shadow-sm transition-colors"
+              >
+                ☁️ Seed Dipak &amp; Nokha to Supabase Cloud
+              </button>
+            )}
+          </div>
+          {needsSeed && isSeedFormOpen && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-4 rounded-lg border border-sky-200 dark:border-sky-800 bg-white dark:bg-slate-900">
+              <input
+                type="password"
+                value={dipakSeedPassword}
+                onChange={(event) => setDipakSeedPassword(event.target.value)}
+                placeholder="Dipak account password"
+                autoComplete="new-password"
+                className="px-3 py-2 text-xs rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+              />
+              <input
+                type="password"
+                value={nokhaSeedPassword}
+                onChange={(event) => setNokhaSeedPassword(event.target.value)}
+                placeholder="Nokha account password"
+                autoComplete="new-password"
+                className="px-3 py-2 text-xs rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+              />
+              <button
+                onClick={handleSeedCandidates}
+                disabled={isSeeding}
+                className="sm:col-span-2 px-3 py-2 text-xs font-bold rounded-md bg-sky-700 hover:bg-sky-800 text-white disabled:opacity-50"
+              >
+                {isSeeding ? 'Syncing profiles and documents...' : 'Create / Sync Cloud Profiles'}
+              </button>
+            </div>
+          )}
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex flex-col transition-colors">
@@ -267,6 +355,14 @@ export default function AdminPage() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {needsSeed && (
+              <button
+                onClick={() => setIsSeedFormOpen((open) => !open)}
+                className="px-3.5 py-2 text-xs font-bold rounded-lg bg-sky-700 hover:bg-sky-800 text-white shadow-sm flex items-center gap-1.5 transition-colors"
+              >
+                <span>☁️ Seed Dipak &amp; Nokha to Supabase Cloud</span>
+              </button>
+            )}
             <button
               onClick={() => setIsRegisterModalOpen(true)}
               className="px-3.5 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1.5 transition-colors"
@@ -277,6 +373,33 @@ export default function AdminPage() {
             <div className="text-xs font-semibold px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
               Total Queue: <strong>{candidates.length} Dossiers</strong>
             </div>
+            {needsSeed && isSeedFormOpen && (
+              <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40">
+                <input
+                  type="password"
+                  value={dipakSeedPassword}
+                  onChange={(event) => setDipakSeedPassword(event.target.value)}
+                  placeholder="Dipak account password"
+                  autoComplete="new-password"
+                  className="px-3 py-2 text-xs rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                />
+                <input
+                  type="password"
+                  value={nokhaSeedPassword}
+                  onChange={(event) => setNokhaSeedPassword(event.target.value)}
+                  placeholder="Nokha account password"
+                  autoComplete="new-password"
+                  className="px-3 py-2 text-xs rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                />
+                <button
+                  onClick={handleSeedCandidates}
+                  disabled={isSeeding}
+                  className="sm:col-span-2 px-3 py-2 text-xs font-bold rounded-md bg-sky-700 hover:bg-sky-800 text-white disabled:opacity-50"
+                >
+                  {isSeeding ? 'Syncing profiles and documents...' : 'Create / Sync Cloud Profiles'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
