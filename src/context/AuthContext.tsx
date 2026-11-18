@@ -2,8 +2,9 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { User, CandidateRecord, StageNumber, DocumentStatus, DocumentRecord, Role } from '@/types';
-import { INITIAL_CANDIDATES, MOCK_ADMIN_USER, MOCK_ADMIN_PASSWORD } from '@/data/mockUsers';
+import { User, CandidateRecord, StageNumber, DocumentStatus, DocumentRecord, Role, AccountStatus } from '@/types';
+import { MOCK_ADMIN_USER, MOCK_ADMIN_PASSWORD } from '@/data/mockUsers';
+import { usePortalStore } from './PortalStoreContext';
 
 interface AuthContextType {
   user: User | null;
@@ -13,7 +14,7 @@ interface AuthContextType {
     email: string,
     pass: string,
     roleRestriction?: Role
-  ) => Promise<{ success: boolean; role?: Role; errorReason?: string }>;
+  ) => Promise<{ success: boolean; role?: Role; accountStatus?: AccountStatus; errorReason?: string }>;
   logout: () => void;
   selectCandidate: (id: string) => void;
   advanceCandidateStage: (candidateId: string) => void;
@@ -29,61 +30,31 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [allCandidates, setAllCandidates] = useState<CandidateRecord[]>(INITIAL_CANDIDATES);
-  const [selectedCandidateId, setSelectedCandidateId] = useState<string>('dipak-karki');
-  const [isInitialized, setIsInitialized] = useState(false);
+  const portalStore = usePortalStore();
 
-  // Initialize candidates & session from localStorage / sessionStorage
+  const [user, setUser] = useState<User | null>(null);
+
+  // Restore user session on mount
   useEffect(() => {
     try {
-      const savedCandidates = localStorage.getItem('siri_candidates_list');
-      if (savedCandidates) {
-        const parsed: CandidateRecord[] = JSON.parse(savedCandidates);
-        // Ensure all initial candidates (including Nokha) are present in the list
-        const missing = INITIAL_CANDIDATES.filter(
-          (ic) => !parsed.some((p) => p.id === ic.id || p.email.toLowerCase() === ic.email.toLowerCase())
-        );
-        if (missing.length > 0) {
-          const merged = [...parsed, ...missing];
-          setAllCandidates(merged);
-          localStorage.setItem('siri_candidates_list', JSON.stringify(merged));
-        } else {
-          setAllCandidates(parsed);
-        }
-      } else {
-        localStorage.setItem('siri_candidates_list', JSON.stringify(INITIAL_CANDIDATES));
-      }
-
       const savedUser = sessionStorage.getItem('siri_auth_user');
       if (savedUser) {
-        const parsedUser = JSON.parse(savedUser);
-        setUser(parsedUser);
-        if (parsedUser.candidateId) {
-          setSelectedCandidateId(parsedUser.candidateId);
+        const parsed: User = JSON.parse(savedUser);
+        setUser(parsed);
+        if (parsed.candidateId) {
+          portalStore.selectCandidate(parsed.candidateId);
         }
       }
     } catch (e) {
-      console.error('Error loading session or candidates:', e);
-    } finally {
-      setIsInitialized(true);
+      console.warn('Error reading auth session from sessionStorage:', e);
     }
   }, []);
-
-  const syncCandidates = (updatedList: CandidateRecord[]) => {
-    setAllCandidates(updatedList);
-    try {
-      localStorage.setItem('siri_candidates_list', JSON.stringify(updatedList));
-    } catch (e) {
-      console.warn('Could not save candidates to localStorage:', e);
-    }
-  };
 
   const login = async (
     email: string,
     pass: string,
     roleRestriction?: Role
-  ): Promise<{ success: boolean; role?: Role; errorReason?: string }> => {
+  ): Promise<{ success: boolean; role?: Role; accountStatus?: AccountStatus; errorReason?: string }> => {
     const cleanEmail = email.trim().toLowerCase();
     const isAdminCreds = cleanEmail === MOCK_ADMIN_USER.email.toLowerCase() && pass === MOCK_ADMIN_PASSWORD;
 
@@ -97,7 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // 2. If gateway specifies admin only
     if (roleRestriction === 'admin' && !isAdminCreds) {
-      const candidateCheck = allCandidates.find((c) => c.email.toLowerCase() === cleanEmail);
+      const candidateCheck = portalStore.candidates.find((c) => c.email.toLowerCase() === cleanEmail);
       if (candidateCheck) {
         return {
           success: false,
@@ -119,10 +90,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // 4. Candidate Login Execution
-    const matchedCandidate = allCandidates.find((c) => c.email.toLowerCase() === cleanEmail);
+    const matchedCandidate = portalStore.candidates.find((c) => c.email.toLowerCase() === cleanEmail);
     if (matchedCandidate) {
       let valid = false;
-      if (cleanEmail === 'dk3430143@gmail.com' && (pass === 'Dipak@1983' || pass === 'dipak1983')) {
+      if (matchedCandidate.password && pass === matchedCandidate.password) {
+        valid = true;
+      } else if (cleanEmail === 'dk3430143@gmail.com' && (pass === 'Dipak@1983' || pass === 'dipak1983')) {
         valid = true;
       } else if (cleanEmail === 'madanadhikari65@gmail.com' && (pass === 'Nokha@1992' || pass === 'nokha1992')) {
         valid = true;
@@ -130,7 +103,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         valid = true;
       } else if (cleanEmail.includes('sunita') && pass === 'Sunita@1991') {
         valid = true;
-      } else if (pass.length >= 4) {
+      } else if (pass.length >= 4 && (!matchedCandidate.password || pass === matchedCandidate.password)) {
         valid = true;
       }
 
@@ -143,9 +116,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           candidateId: matchedCandidate.id,
         };
         setUser(candidateUser);
-        setSelectedCandidateId(matchedCandidate.id);
+        portalStore.selectCandidate(matchedCandidate.id);
         sessionStorage.setItem('siri_auth_user', JSON.stringify(candidateUser));
-        return { success: true, role: 'candidate' };
+        return {
+          success: true,
+          role: 'candidate',
+          accountStatus: matchedCandidate.accountStatus,
+        };
       }
     }
 
@@ -159,134 +136,65 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const selectCandidate = (id: string) => {
-    setSelectedCandidateId(id);
+    portalStore.selectCandidate(id);
   };
 
   const advanceCandidateStage = (candidateId: string) => {
-    const updated = allCandidates.map((c) => {
-      if (c.id === candidateId && c.currentStage < 6) {
-        const nextStage = (c.currentStage + 1) as StageNumber;
-        const updatedStages = c.stages.map((st) => {
-          if (st.number === c.currentStage) return { ...st, status: 'completed' as const };
-          if (st.number === nextStage) return { ...st, status: 'active' as const };
-          return st;
-        });
-        return { ...c, currentStage: nextStage, stages: updatedStages };
-      }
-      return c;
-    });
-    syncCandidates(updated);
+    const c = portalStore.candidates.find((cand) => cand.id === candidateId);
+    if (c && c.currentStage < 6) {
+      portalStore.setCandidateStage(candidateId, (c.currentStage + 1) as StageNumber);
+    }
   };
 
   const rollbackCandidateStage = (candidateId: string) => {
-    const updated = allCandidates.map((c) => {
-      if (c.id === candidateId && c.currentStage > 1) {
-        const prevStage = (c.currentStage - 1) as StageNumber;
-        const updatedStages = c.stages.map((st) => {
-          if (st.number === c.currentStage) return { ...st, status: 'pending' as const };
-          if (st.number === prevStage) return { ...st, status: 'active' as const };
-          return st;
-        });
-        return { ...c, currentStage: prevStage, stages: updatedStages };
-      }
-      return c;
-    });
-    syncCandidates(updated);
+    const c = portalStore.candidates.find((cand) => cand.id === candidateId);
+    if (c && c.currentStage > 1) {
+      portalStore.setCandidateStage(candidateId, (c.currentStage - 1) as StageNumber);
+    }
   };
 
   const setCandidateStage = (candidateId: string, stage: StageNumber) => {
-    const updated = allCandidates.map((c) => {
-      if (c.id === candidateId) {
-        const updatedStages = c.stages.map((st) => {
-          if (st.number < stage) return { ...st, status: 'completed' as const };
-          if (st.number === stage) return { ...st, status: 'active' as const };
-          return { ...st, status: 'pending' as const };
-        });
-        return { ...c, currentStage: stage, stages: updatedStages };
-      }
-      return c;
-    });
-    syncCandidates(updated);
+    portalStore.setCandidateStage(candidateId, stage);
   };
 
-  const updateDocumentStatus = (candidateId: string, docId: string, status: DocumentStatus, notes?: string) => {
-    const updated = allCandidates.map((c) => {
-      if (c.id === candidateId) {
-        const updatedDocs = c.documents.map((d) => {
-          if (d.id === docId) {
-            return { ...d, status, reviewerNotes: notes !== undefined ? notes : d.reviewerNotes };
-          }
-          return d;
-        });
-        return { ...c, documents: updatedDocs };
-      }
-      return c;
-    });
-    syncCandidates(updated);
+  const updateDocumentStatus = (
+    candidateId: string,
+    docId: string,
+    status: DocumentStatus,
+    notes?: string
+  ) => {
+    if (status === 'verified') {
+      portalStore.verifyDocument(candidateId, docId);
+    } else if (status === 'rejected') {
+      portalStore.rejectDocument(candidateId, docId, notes || 'Rejected by caseworker review');
+    }
   };
 
   const addCandidateDocument = (candidateId: string, doc: DocumentRecord) => {
-    const updated = allCandidates.map((c) => {
-      if (c.id === candidateId) {
-        return { ...c, documents: [doc, ...c.documents] };
-      }
-      return c;
-    });
-    syncCandidates(updated);
+    portalStore.dispatchAdminDocument(candidateId, doc.title, doc.category || 'General', doc.body, false);
   };
 
   const saveCandidateSignature = (candidateId: string, signatureDataUrl: string) => {
-    const nowStr = new Date().toISOString();
-    const updated = allCandidates.map((c) => {
-      if (c.id === candidateId) {
-        const updatedDocs = c.documents.map((d) => {
-          if (d.key === 'vfsletter') {
-            return { ...d, status: 'verified' as const };
-          }
-          return d;
-        });
-        const updatedChecklist = c.checklist.map((chk) => {
-          if (chk.id === 'chk_5') return { ...chk, checked: true };
-          return chk;
-        });
-        return {
-          ...c,
-          signatureDataUrl,
-          signatureTimestamp: nowStr,
-          documents: updatedDocs,
-          checklist: updatedChecklist,
-        };
-      }
-      return c;
-    });
-    syncCandidates(updated);
+    portalStore.saveCandidateSignature(candidateId, signatureDataUrl);
   };
 
   const toggleChecklistItem = (candidateId: string, checkId: string) => {
-    const updated = allCandidates.map((c) => {
-      if (c.id === candidateId) {
-        const updatedChecklist = c.checklist.map((chk) => {
-          if (chk.id === checkId) return { ...chk, checked: !chk.checked };
-          return chk;
-        });
-        return { ...c, checklist: updatedChecklist };
-      }
-      return c;
-    });
-    syncCandidates(updated);
+    portalStore.toggleChecklistItem(candidateId, checkId);
   };
 
-  const candidate =
+  const activeCandidate =
     user?.role === 'candidate'
-      ? allCandidates.find((c) => c.id === user.candidateId || c.email.toLowerCase() === user.email.toLowerCase()) || allCandidates[0]
-      : allCandidates.find((c) => c.id === selectedCandidateId) || allCandidates[0];
+      ? portalStore.candidates.find((c) => c.id === user.candidateId || c.email.toLowerCase() === user.email.toLowerCase()) ||
+        portalStore.candidates[0] ||
+        null
+      : portalStore.selectedCandidate;
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        candidate,
-        allCandidates,
+        candidate: activeCandidate,
+        allCandidates: portalStore.candidates,
         login,
         logout,
         selectCandidate,

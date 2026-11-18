@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
+import { usePortalStore } from '@/context/PortalStoreContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { useToast } from '@/context/ToastContext';
 import { Header } from '@/components/shared/Header';
@@ -11,6 +13,7 @@ import { Lock, Mail, ArrowRight } from 'lucide-react';
 export default function CandidateLoginPage() {
   const router = useRouter();
   const { user, login } = useAuth();
+  const portalStore = usePortalStore();
   const { t } = useLanguage();
   const { showToast } = useToast();
 
@@ -26,10 +29,15 @@ export default function CandidateLoginPage() {
       if (user.role === 'admin') {
         router.push('/admin');
       } else {
-        router.push('/portal');
+        const candidateRecord = portalStore.candidates.find((c) => c.id === user.candidateId);
+        if (candidateRecord?.accountStatus === 'pending_approval' || candidateRecord?.accountStatus === 'rejected') {
+          router.push('/pending-approval');
+        } else {
+          router.push('/portal');
+        }
       }
     }
-  }, [user, router]);
+  }, [user, portalStore.candidates, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,8 +55,13 @@ export default function CandidateLoginPage() {
     setIsLoading(false);
 
     if (res.success && res.role === 'candidate') {
-      showToast('Authenticated as Candidate. Redirecting to dossier...', 'success');
-      router.push('/portal');
+      if (res.accountStatus === 'pending_approval' || res.accountStatus === 'rejected') {
+        showToast('Registration is under caseworker review.', 'info');
+        router.push('/pending-approval');
+      } else {
+        showToast('Authenticated as Candidate. Redirecting to dossier...', 'success');
+        router.push('/portal');
+      }
     } else {
       setShake(true);
       setTimeout(() => setShake(false), 500);
@@ -137,6 +150,16 @@ export default function CandidateLoginPage() {
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
+
+          {/* New Applicant Self-Registration Link */}
+          <div className="mt-6 pt-5 border-t border-slate-200 dark:border-slate-800 text-center">
+            <Link
+              href="/register"
+              className="text-xs font-bold text-brand-primary dark:text-emerald-400 hover:text-brand-secondary hover:underline inline-flex items-center gap-1.5 transition-colors"
+            >
+              <span>New Applicant? Register for Visa Portal &rarr;</span>
+            </Link>
+          </div>
         </div>
       </main>
 

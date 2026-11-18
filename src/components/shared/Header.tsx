@@ -1,17 +1,46 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { usePortalStore } from '@/context/PortalStoreContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { useToast } from '@/context/ToastContext';
-import { Language } from '@/types';
-import { Moon, Sun, Printer, LogOut, Globe, ShieldCheck } from 'lucide-react';
+import { Language, NotificationItem } from '@/types';
+import {
+  Moon,
+  Sun,
+  Printer,
+  LogOut,
+  Globe,
+  ShieldCheck,
+  Bell,
+  CheckCircle,
+  AlertTriangle,
+  Info,
+  XCircle,
+  CheckCheck,
+  X,
+} from 'lucide-react';
 
 export const Header: React.FC = () => {
   const { user, logout } = useAuth();
+  const { candidates, markNotificationRead, markAllNotificationsRead } = usePortalStore();
   const { language, setLanguage, t } = useLanguage();
   const { showToast } = useToast();
   const [isDark, setIsDark] = useState<boolean>(false);
+  const [isNotifOpen, setIsNotifOpen] = useState<boolean>(false);
+
+  const notifRef = useRef<HTMLDivElement | null>(null);
+
+  // Active candidate notifications
+  const currentCandidate = user?.candidateId
+    ? candidates.find((c) => c.id === user.candidateId)
+    : user && user.role === 'candidate'
+    ? candidates.find((c) => c.email.toLowerCase() === user.email.toLowerCase())
+    : null;
+
+  const notifications: NotificationItem[] = currentCandidate?.notifications || [];
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   useEffect(() => {
     const isDarkMode =
@@ -23,6 +52,19 @@ export const Header: React.FC = () => {
     } else {
       document.documentElement.classList.remove('dark');
     }
+  }, []);
+
+  // Close notifications dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setIsNotifOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   const toggleDarkMode = () => {
@@ -41,6 +83,32 @@ export const Header: React.FC = () => {
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleMarkAllRead = () => {
+    if (currentCandidate) {
+      markAllNotificationsRead(currentCandidate.id);
+      showToast('All notifications marked as read', 'success');
+    }
+  };
+
+  const handleNotificationClick = (notif: NotificationItem) => {
+    if (currentCandidate && !notif.read) {
+      markNotificationRead(currentCandidate.id, notif.id);
+    }
+  };
+
+  const renderNotifIcon = (type: NotificationItem['type']) => {
+    switch (type) {
+      case 'success':
+        return <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />;
+      case 'warning':
+        return <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />;
+      case 'error':
+        return <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />;
+      default:
+        return <Info className="w-4 h-4 text-blue-500 flex-shrink-0" />;
+    }
   };
 
   return (
@@ -80,6 +148,93 @@ export const Header: React.FC = () => {
               <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
                 {user.role === 'admin' ? 'Caseworker' : 'Candidate'}
               </span>
+            </div>
+          )}
+
+          {/* Notification Bell (Candidate Portal) */}
+          {user && currentCandidate && (
+            <div className="relative" ref={notifRef}>
+              <button
+                type="button"
+                onClick={() => setIsNotifOpen(!isNotifOpen)}
+                className="relative p-2 rounded-md text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors"
+                title="Notifications"
+                aria-label="Notifications"
+              >
+                <Bell className="w-4 h-4" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-red-600 text-[9px] font-extrabold text-white ring-2 ring-white dark:ring-slate-900 animate-pulse">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Dropdown Menu */}
+              {isNotifOpen && (
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 py-2 z-50 animate-fade-in">
+                  <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                        Official Notifications
+                      </span>
+                      {unreadCount > 0 && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">
+                          {unreadCount} new
+                        </span>
+                      )}
+                    </div>
+                    {unreadCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleMarkAllRead}
+                        className="text-[11px] font-semibold text-brand-primary dark:text-emerald-400 hover:underline flex items-center gap-1"
+                      >
+                        <CheckCheck className="w-3.5 h-3.5" />
+                        <span>Mark all read</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                    {notifications.length === 0 ? (
+                      <div className="py-6 text-center text-xs text-slate-400">
+                        No notifications yet.
+                      </div>
+                    ) : (
+                      notifications.map((notif) => (
+                        <div
+                          key={notif.id}
+                          onClick={() => handleNotificationClick(notif)}
+                          className={`p-3 text-left transition-colors cursor-pointer flex items-start gap-2.5 ${
+                            notif.read
+                              ? 'bg-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                              : 'bg-emerald-50/50 dark:bg-emerald-950/20 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                          }`}
+                        >
+                          <div className="mt-0.5">{renderNotifIcon(notif.type)}</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <span
+                                className={`text-xs font-bold truncate ${
+                                  notif.read ? 'text-slate-700 dark:text-slate-300' : 'text-slate-900 dark:text-slate-100'
+                                }`}
+                              >
+                                {notif.title}
+                              </span>
+                              <span className="text-[10px] text-slate-400 flex-shrink-0">
+                                {new Date(notif.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                              {notif.message}
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

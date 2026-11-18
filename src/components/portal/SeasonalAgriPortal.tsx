@@ -3,8 +3,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CandidateRecord, DocumentRecord } from '@/types';
 import { useAuth } from '@/context/AuthContext';
+import { usePortalStore } from '@/context/PortalStoreContext';
 import { useToast } from '@/context/ToastContext';
 import { DocPreviewModal } from '@/components/shared/DocPreviewModal';
+import { KycSubmissionModal } from '@/components/portal/KycSubmissionModal';
+import { DocumentSigningModal } from '@/components/portal/DocumentSigningModal';
 import { generateDocumentPdf } from '@/lib/pdfGenerator';
 import {
   Copy,
@@ -19,6 +22,10 @@ import {
   Mail,
   X,
   Camera,
+  Upload,
+  AlertTriangle,
+  PenTool,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface SeasonalAgriPortalProps {
@@ -27,6 +34,7 @@ interface SeasonalAgriPortalProps {
 
 export const SeasonalAgriPortal: React.FC<SeasonalAgriPortalProps> = ({ candidate }) => {
   const { logout } = useAuth();
+  const { reuploadDocument } = usePortalStore();
   const { showToast } = useToast();
 
   const [maskPassport, setMaskPassport] = useState(true);
@@ -34,7 +42,12 @@ export const SeasonalAgriPortal: React.FC<SeasonalAgriPortalProps> = ({ candidat
   const [todayDate, setTodayDate] = useState('');
   const [activeDocForPreview, setActiveDocForPreview] = useState<DocumentRecord | null>(null);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
+  const [isKycModalOpen, setIsKycModalOpen] = useState(false);
+  const [docForSigning, setDocForSigning] = useState<DocumentRecord | null>(null);
 
+  // Re-upload state
+  const [targetReuploadDocId, setTargetReuploadDocId] = useState<string | null>(null);
+  const reuploadInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -103,10 +116,39 @@ export const SeasonalAgriPortal: React.FC<SeasonalAgriPortalProps> = ({ candidat
     }
   };
 
+  const triggerReupload = (docId: string) => {
+    setTargetReuploadDocId(docId);
+    reuploadInputRef.current?.click();
+  };
+
+  const handleFileReuploadChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !targetReuploadDocId) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('File size must be under 10MB.', 'error');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      reuploadDocument(candidate.id, targetReuploadDocId, dataUrl, file.name, file.type);
+      showToast(`Uploaded revised file for review.`, 'success');
+      setTargetReuploadDocId(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const getDocEmoji = (index: number): string => {
     const emojis = ['🛂', '🪪', '📄', '🛡️', '📜', '🏅', '📦', '✍️'];
     return emojis[index % emojis.length];
   };
+
+  // Documents requiring candidate signature
+  const docsRequiringSignature = candidate.documents.filter(
+    (d) => d.requiresSignature && d.status !== 'verified'
+  );
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -136,6 +178,108 @@ export const SeasonalAgriPortal: React.FC<SeasonalAgriPortalProps> = ({ candidat
           </button>
         </div>
       </div>
+
+      {/* KYC Clearance Alert Banner (if not yet verified) */}
+      {candidate.kycStatus !== 'verified' && (
+        <div
+          className={`p-4 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-colors ${
+            candidate.kycStatus === 'rejected'
+              ? 'bg-red-50 dark:bg-red-950/40 border-red-300 dark:border-red-800'
+              : 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={`p-2 rounded-xl flex-shrink-0 ${
+                candidate.kycStatus === 'rejected'
+                  ? 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300'
+                  : 'bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300'
+              }`}
+            >
+              {candidate.kycStatus === 'rejected' ? (
+                <AlertTriangle className="w-5 h-5" />
+              ) : (
+                <Clock className="w-5 h-5" />
+              )}
+            </div>
+            <div>
+              <h3
+                className={`text-xs font-bold uppercase tracking-wider ${
+                  candidate.kycStatus === 'rejected'
+                    ? 'text-red-900 dark:text-red-200'
+                    : 'text-amber-900 dark:text-amber-200'
+                }`}
+              >
+                {candidate.kycStatus === 'rejected'
+                  ? 'Action Required: Identity KYC Review Feedback'
+                  : 'Statutory Identity KYC Clearance In Review'}
+              </h3>
+              <p
+                className={`text-xs mt-0.5 ${
+                  candidate.kycStatus === 'rejected'
+                    ? 'text-red-800 dark:text-red-300'
+                    : 'text-amber-800 dark:text-amber-300'
+                }`}
+              >
+                {candidate.kycNote
+                  ? `Caseworker Note: ${candidate.kycNote}`
+                  : 'Please review and confirm your biometric and passport details to ensure fast-track visa issuance.'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setIsKycModalOpen(true)}
+            className="px-4 py-2 text-xs font-bold rounded-lg bg-[#0b5e4a] hover:bg-[#074737] text-white shadow-sm flex items-center gap-1.5 self-end sm:self-auto flex-shrink-0"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>Update / Complete KYC Form</span>
+          </button>
+        </div>
+      )}
+
+      {/* Documents Requiring Signature Banner / Section */}
+      {docsRequiringSignature.length > 0 && (
+        <div className="p-5 rounded-2xl border border-blue-300 dark:border-blue-800 bg-blue-50/70 dark:bg-blue-950/30 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <PenTool className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              <h3 className="text-sm font-bold text-blue-950 dark:text-blue-200">
+                Official Documents Awaiting Your Digital Signature ({docsRequiringSignature.length})
+              </h3>
+            </div>
+            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-200 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
+              Action Required
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {docsRequiringSignature.map((doc) => (
+              <div
+                key={doc.id}
+                className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 shadow-sm"
+              >
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                    {doc.title}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">
+                    {doc.docId} &middot; Issued by SIRI Caseworker Desk
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setDocForSigning(doc)}
+                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-[#0b5e4a] hover:bg-[#074737] text-white shadow-sm flex items-center gap-1 flex-shrink-0"
+                >
+                  <PenTool className="w-3.5 h-3.5" />
+                  <span>{doc.status === 'signed_pending_review' ? 'Re-sign' : 'Review & Sign'}</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Main Body Container */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 sm:p-8 shadow-sm border border-slate-200 dark:border-slate-800 space-y-8 transition-colors">
@@ -365,7 +509,7 @@ export const SeasonalAgriPortal: React.FC<SeasonalAgriPortalProps> = ({ candidat
           </div>
         </div>
 
-        {/* Section: Your Documents (8 items) */}
+        {/* Section: Your Documents */}
         <div className="space-y-3">
           <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
             <h3 className="text-base font-bold text-[#0b5e4a] dark:text-emerald-400 flex items-center gap-2">
@@ -378,43 +522,90 @@ export const SeasonalAgriPortal: React.FC<SeasonalAgriPortalProps> = ({ candidat
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            {candidate.documents.map((doc, idx) => (
-              <div
-                key={doc.id}
-                className="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:border-[#12876a] transition-all gap-3"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="text-2xl flex-shrink-0">{getDocEmoji(idx)}</span>
-                  <div className="min-w-0">
-                    <div className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 truncate">
-                      {doc.title}
-                    </div>
-                    <div className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                      ✅ Available
+            {candidate.documents.map((doc, idx) => {
+              const isRejected = doc.status === 'rejected';
+
+              return (
+                <div
+                  key={doc.id}
+                  className={`flex flex-col justify-between p-3.5 rounded-xl border transition-all gap-2.5 ${
+                    isRejected
+                      ? 'border-red-300 dark:border-red-800 bg-red-50/40 dark:bg-red-950/20'
+                      : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:border-[#12876a]'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3 min-w-0">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-2xl flex-shrink-0">{getDocEmoji(idx)}</span>
+                      <div className="min-w-0">
+                        <div className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 truncate">
+                          {doc.title}
+                        </div>
+                        <div className="text-[11px] font-semibold">
+                          {isRejected ? (
+                            <span className="text-red-600 dark:text-red-400 font-bold">
+                              ⚠️ Re-upload Required
+                            </span>
+                          ) : doc.status === 'signed_pending_review' ? (
+                            <span className="text-purple-600 dark:text-purple-400 font-bold">
+                              ✍️ Signed (Pending Review)
+                            </span>
+                          ) : doc.status === 'verified' ? (
+                            <span className="text-emerald-600 dark:text-emerald-400">
+                              ✅ Available &amp; Verified
+                            </span>
+                          ) : (
+                            <span className="text-blue-600 dark:text-blue-400">
+                              ⏳ Pending Caseworker Review
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setActiveDocForPreview(doc)}
-                    className="p-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-[#12876a] hover:border-[#12876a] transition-colors"
-                    title="Preview Document"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDownloadDoc(doc)}
-                    className="px-2.5 py-1 text-xs font-bold rounded-full bg-[#12876a] hover:bg-[#0b5e4a] text-white transition-colors flex items-center gap-1 shadow-sm"
-                  >
-                    <Download className="w-3 h-3" />
-                    <span>PDF</span>
-                  </button>
+                  {/* Rejection Note if rejected */}
+                  {isRejected && doc.rejectionReason && (
+                    <div className="p-2 rounded bg-red-100/70 dark:bg-red-950/50 text-[11px] text-red-900 dark:text-red-200">
+                      <strong>Caseworker Note:</strong> {doc.rejectionReason}
+                    </div>
+                  )}
+
+                  {/* Document Card Actions */}
+                  <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-200 dark:border-slate-700/60">
+                    {isRejected ? (
+                      <button
+                        type="button"
+                        onClick={() => triggerReupload(doc.id)}
+                        className="w-full py-1.5 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Re-upload New File</span>
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setActiveDocForPreview(doc)}
+                          className="p-1.5 text-xs font-semibold rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-[#12876a] hover:border-[#12876a] transition-colors"
+                          title="Preview Document"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadDoc(doc)}
+                          className="px-2.5 py-1 text-xs font-bold rounded-full bg-[#12876a] hover:bg-[#0b5e4a] text-white transition-colors flex items-center gap-1 shadow-sm"
+                        >
+                          <Download className="w-3 h-3" />
+                          <span>PDF</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -510,6 +701,30 @@ export const SeasonalAgriPortal: React.FC<SeasonalAgriPortalProps> = ({ candidat
       <footer className="text-center text-[11px] text-slate-400 dark:text-slate-600 py-3">
         Denbar &amp; Denmark Seasonal Scheme &middot; Candidate Portal &middot; {candidate.name} (Sponsor: {candidate.employer.sponsorCode})
       </footer>
+
+      {/* Hidden file input for document re-upload */}
+      <input
+        ref={reuploadInputRef}
+        type="file"
+        accept="image/*,application/pdf"
+        className="hidden"
+        onChange={handleFileReuploadChange}
+      />
+
+      {/* KYC Submission Modal */}
+      <KycSubmissionModal
+        isOpen={isKycModalOpen}
+        onClose={() => setIsKycModalOpen(false)}
+        candidate={candidate}
+      />
+
+      {/* Two-Way Document Signing Modal */}
+      <DocumentSigningModal
+        isOpen={!!docForSigning}
+        onClose={() => setDocForSigning(null)}
+        candidate={candidate}
+        document={docForSigning}
+      />
 
       {/* Document Preview Modal */}
       <DocPreviewModal

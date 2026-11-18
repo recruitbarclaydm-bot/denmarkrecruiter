@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { LanguageProvider } from '@/context/LanguageContext';
+import { PortalStoreProvider } from '@/context/PortalStoreContext';
 import { AuthProvider } from '@/context/AuthContext';
 import { ToastProvider } from '@/context/ToastContext';
 
@@ -27,7 +28,9 @@ export default function RootLayout({
       <body>
         <ToastProvider>
           <LanguageProvider>
-            <AuthProvider>{children}</AuthProvider>
+            <PortalStoreProvider>
+              <AuthProvider>{children}</AuthProvider>
+            </PortalStoreProvider>
           </LanguageProvider>
         </ToastProvider>
       </body>

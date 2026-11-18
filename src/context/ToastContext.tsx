@@ -1,9 +1,9 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Info, X, AlertTriangle } from 'lucide-react';
 
-export type ToastType = 'success' | 'error' | 'info';
+export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
 export interface ToastMessage {
   id: string;
@@ -43,6 +43,8 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             className={`pointer-events-auto flex items-center justify-between gap-3 px-4 py-3 rounded-lg shadow-lg border text-sm transition-all duration-300 animate-slide-up ${
               t.type === 'error'
                 ? 'bg-red-50 text-red-900 border-red-200 dark:bg-red-950 dark:text-red-100 dark:border-red-800'
+                : t.type === 'warning'
+                ? 'bg-amber-50 text-amber-900 border-amber-200 dark:bg-amber-950 dark:text-amber-100 dark:border-amber-800'
                 : t.type === 'info'
                 ? 'bg-blue-50 text-blue-900 border-blue-200 dark:bg-blue-950 dark:text-blue-100 dark:border-blue-800'
                 : 'bg-emerald-50 text-emerald-900 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-100 dark:border-emerald-800'
@@ -51,6 +53,8 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             <div className="flex items-center gap-2.5">
               {t.type === 'error' ? (
                 <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+              ) : t.type === 'warning' ? (
+                <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
               ) : t.type === 'info' ? (
                 <Info className="w-5 h-5 text-blue-600 flex-shrink-0" />
               ) : (

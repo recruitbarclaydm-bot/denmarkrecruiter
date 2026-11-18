@@ -12,17 +12,49 @@ export interface StageItem {
   completedDate?: string;
 }
 
-export type DocumentStatus = 'verified' | 'pending' | 'flagged' | 'action_required';
+export type AccountStatus = 'pending_approval' | 'approved' | 'rejected';
+export type KycStatus = 'pending' | 'submitted' | 'verified' | 'rejected';
+export type SchemeType = 'siri_herdsman' | 'seasonal_agriculture';
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  actor: string;
+  action: string;
+  details: string;
+}
+
+export interface NotificationItem {
+  id: string;
+  timestamp: string;
+  title: string;
+  message: string;
+  read: boolean;
+  type?: 'info' | 'success' | 'warning' | 'error';
+  link?: string;
+}
+
+export type DocumentStatus =
+  | 'verified'
+  | 'pending'
+  | 'flagged'
+  | 'action_required'
+  | 'rejected'
+  | 'signed_pending_review';
 
 export interface DocumentRecord {
   id: string;
   key: string;
   title: string;
+  name?: string;
   filename: string;
   docId: string;
   authority: string;
   date: string;
   status: DocumentStatus;
+  rejectionReason?: string;
+  fileUrl?: string;
+  uploadedAt?: string;
   isCandidateUpload?: boolean;
   category?: string;
   fileSize?: string;
@@ -31,6 +63,11 @@ export interface DocumentRecord {
   body: string;
   verificationHash?: string;
   reviewerNotes?: string;
+  isDispatchedByAdmin?: boolean;
+  requiresSignature?: boolean;
+  signatureDataUrl?: string;
+  signedAt?: string;
+  signerLegalName?: string;
 }
 
 export interface VfsAppointment {
@@ -71,8 +108,10 @@ export interface CandidateEmployer {
 export interface CandidateRecord {
   id: string;
   email: string;
+  password?: string;
   name: string;
   passportNumber: string;
+  passportExpiry?: string;
   dob: string;
   nationality: string;
   permanentAddress: string;
@@ -87,7 +126,7 @@ export interface CandidateRecord {
   checklist: ChecklistItem[];
   signatureDataUrl?: string;
   signatureTimestamp?: string;
-  schemeType?: 'siri_herdsman' | 'seasonal_agriculture';
+  schemeType?: SchemeType;
   contractDuration?: string;
   statusBadgeText?: string;
   denbarAccount?: {
@@ -107,6 +146,13 @@ export interface CandidateRecord {
     subscriptionAmount: string;
   };
   courierTracking?: string;
+  accountStatus: AccountStatus;
+  accountRejectionReason?: string;
+  kycStatus: KycStatus;
+  kycNote?: string;
+  auditLog: AuditLogEntry[];
+  notifications: NotificationItem[];
+  workExperienceSummary?: string;
 }
 
 export interface User {
@@ -124,4 +170,27 @@ export interface SchemeMetadata {
   minMonthlySalaryDKK: number;
   standardHoursWeekly: number;
   collectiveAgreementBoard: string;
+}
+
+export interface NewCandidateInput {
+  name?: string;
+  fullName?: string;
+  email: string;
+  password?: string;
+  passportNumber: string;
+  passportExpiry?: string;
+  dob: string;
+  nationality?: string;
+  permanentAddress?: string;
+  phone?: string;
+  scheme: SchemeType;
+  sponsorCode?: string;
+  cvrNumber?: string;
+  jobTitle?: string;
+  workExperienceSummary?: string;
+  initialDocName?: string;
+  initialDocData?: string;
+  passportScanData?: string;
+  citizenshipScanData?: string;
+  cvData?: string;
 }
