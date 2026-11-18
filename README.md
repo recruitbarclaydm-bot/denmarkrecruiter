@@ -10,12 +10,11 @@ Official Danish Agency for International Recruitment and Integration (SIRI) Cand
   - Pre-departure briefing countdown (anchored to UTC / 10:00 CET).
   - Authentic SIRI workflow tracking (Case Order ID `SB6-948123-2026`, VFS Appointment `VFS-KTM-2026-8819`).
   - Sensitive data masking, dynamic drag-and-drop document upload, HTML5 canvas biometric signature pad, and client-side A4 PDF generator (`html2pdf.js`).
-  - Candidate Demo Account: `dk3430143@gmail.com` / `Dipak@1983`.
-
+  - Strict credential privacy: Zero public demo drawers, auto-fill buttons, or exposed passwords on login screens.
 - **Restricted Caseworker Gateway (`/admin/login`)**:
   - Isolated and unindexed (`robots: noindex, nofollow`) administrative staff access.
   - Role-protected review dashboard at `/admin` for candidate status overrides, audit trail reviews, and signature inspection.
-  - Administrative Account: `caseworker@siri.dk` / `AdminSiri@2026`.
+  - Enforced staff credentials without public hints or pre-fills.
 
 ## Legal Scheme & Collective Agreement Standards
 

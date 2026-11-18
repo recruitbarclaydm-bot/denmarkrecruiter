@@ -6,9 +6,8 @@ import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { useToast } from '@/context/ToastContext';
-import { MOCK_ADMIN_USER, MOCK_ADMIN_PASSWORD } from '@/data/mockUsers';
 import { Header } from '@/components/shared/Header';
-import { Lock, Mail, ChevronDown, ChevronUp, ArrowRight, ShieldCheck, ShieldAlert, Sparkles } from 'lucide-react';
+import { Lock, Mail, ArrowRight, ShieldCheck, ShieldAlert } from 'lucide-react';
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -18,7 +17,6 @@ export default function AdminLoginPage() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showDemo, setShowDemo] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [shake, setShake] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -54,19 +52,6 @@ export default function AdminLoginPage() {
       const err = res.errorReason || 'Access Denied: Invalid administrative credentials.';
       setErrorMessage(err);
       showToast(err, 'error');
-    }
-  };
-
-  const handleAutofillAdmin = async () => {
-    setErrorMessage('');
-    setEmail(MOCK_ADMIN_USER.email);
-    setPassword(MOCK_ADMIN_PASSWORD);
-    setIsLoading(true);
-    const res = await login(MOCK_ADMIN_USER.email, MOCK_ADMIN_PASSWORD, 'admin');
-    setIsLoading(false);
-    if (res.success) {
-      showToast('Logged in as Morten Nyborg (SIRI Caseworker)', 'success');
-      router.push('/admin');
     }
   };
 
@@ -121,7 +106,7 @@ export default function AdminLoginPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="caseworker@siri.dk"
+                  placeholder="Enter staff email"
                   required
                   className="w-full pl-9 pr-3 py-2.5 text-xs rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -138,7 +123,7 @@ export default function AdminLoginPage() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter security key"
+                  placeholder="Enter security password"
                   required
                   className="w-full pl-9 pr-3 py-2.5 text-xs rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -155,45 +140,8 @@ export default function AdminLoginPage() {
             </button>
           </form>
 
-          {/* Staff Demo Access Helper */}
-          <div className="mt-6 pt-5 border-t border-slate-700/80">
-            <button
-              type="button"
-              onClick={() => setShowDemo(!showDemo)}
-              className="w-full flex items-center justify-between text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors"
-            >
-              <span className="flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>Authorized Staff Demo Credentials</span>
-              </span>
-              {showDemo ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
-
-            {showDemo && (
-              <div className="mt-3 p-3 rounded-lg bg-slate-900/90 border border-slate-700 text-xs animate-slide-up">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <div className="font-bold text-slate-200">
-                      Morten Nyborg (SIRI Caseworker)
-                    </div>
-                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                      caseworker@siri.dk &bull; AdminSiri@2026
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAutofillAdmin}
-                    className="px-2.5 py-1 text-[11px] font-bold bg-blue-900/80 hover:bg-blue-800 text-blue-200 rounded border border-blue-700 transition-colors whitespace-nowrap"
-                  >
-                    Auto-fill &amp; Log In
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Return to Candidate Portal Link */}
-          <div className="mt-5 text-center">
+          <div className="mt-6 text-center">
             <Link
               href="/"
               className="text-[11px] text-slate-400 hover:text-slate-200 transition-colors inline-flex items-center gap-1"
