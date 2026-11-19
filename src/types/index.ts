@@ -69,6 +69,44 @@ export interface DocumentRecord {
   signatureDataUrl?: string;
   signedAt?: string;
   signerLegalName?: string;
+  transactionDetails?: ServiceFeeTransaction;
+}
+
+export interface ServiceFeeTransaction {
+  amount: string;
+  method: string;
+  transactionId: string;
+  paymentDate: string;
+  remarks: string;
+}
+
+export interface VideoInterviewSchedule {
+  meetingUrl: string;
+  meetingId: string;
+  passcode: string;
+  scheduledAt: string;
+  coordinatorName: string;
+  preparationNotes: string;
+}
+
+export interface ApplicationCenterSchedule {
+  location: string;
+  scheduledAt: string;
+  referenceCode: string;
+  documentNotes: string;
+}
+
+export interface CandidateProcessMetadata {
+  serviceFeeTransaction?: ServiceFeeTransaction;
+  videoInterview?: VideoInterviewSchedule;
+  applicationCenter?: ApplicationCenterSchedule;
+  coordinatorNotes?: string;
+  priority?: 'Normal' | 'High Priority' | 'Ready' | 'On Hold';
+}
+
+export interface AdminCrmMetadata {
+  notes: string;
+  priority: 'Normal' | 'High Priority' | 'Ready' | 'On Hold';
 }
 
 export interface VfsAppointment {
@@ -148,6 +186,7 @@ export interface CandidateRecord {
   avatarUrl?: string;
   avatarStoragePath?: string;
   extendedKyc?: Partial<NepalKycDetails>;
+  processMeta?: CandidateProcessMetadata;
   schemeType?: SchemeType;
   contractDuration?: string;
   statusBadgeText?: string;

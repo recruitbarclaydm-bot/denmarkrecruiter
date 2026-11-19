@@ -10,6 +10,8 @@ import { Header } from '@/components/shared/Header';
 import { DocPreviewModal } from '@/components/shared/DocPreviewModal';
 import { DispatchDocModal } from '@/components/admin/DispatchDocModal';
 import { ManualRegisterModal } from '@/components/admin/ManualRegisterModal';
+import { AdminCaseTools } from '@/components/admin/AdminCaseTools';
+import { PrivateDossierSummary } from '@/components/shared/PrivateDossierSummary';
 import { generateDocumentPdf } from '@/lib/pdfGenerator';
 import { seedDipakAndNokha } from '@/lib/cloudSeeder';
 import { INITIAL_CANDIDATES } from '@/data/mockUsers';
@@ -42,7 +44,12 @@ import {
   Lock,
   Unlock,
   AlertCircle,
+  Activity,
+  DownloadCloud,
+  X as CloseIcon,
 } from 'lucide-react';
+
+type FunnelKey = 'all' | 'pending' | 'documents' | 'fees' | 'stage4' | 'stage56';
 
 export default function AdminPage() {
   const router = useRouter();
@@ -70,6 +77,8 @@ export default function AdminPage() {
   // UI States
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilterTab, setActiveFilterTab] = useState<'all' | 'pending' | 'action_required' | 'approved'>('all');
+  const [activeFunnel, setActiveFunnel] = useState<FunnelKey>('all');
+  const [isActivityOpen, setIsActivityOpen] = useState(false);
   const [selectedDocId, setSelectedDocId] = useState<string>('');
   const [activeDocForFullPreview, setActiveDocForFullPreview] = useState<DocumentRecord | null>(null);
 
@@ -139,6 +148,12 @@ export default function AdminPage() {
       (c.employer?.sponsorCode || '').toLowerCase().includes(q);
 
     if (!matchesSearch) return false;
+
+    if (activeFunnel === 'pending' && !(c.accountStatus === 'pending_approval' || c.kycStatus === 'submitted' || c.kycStatus === 'pending')) return false;
+    if (activeFunnel === 'documents' && !c.documents.some((document) => document.status === 'pending' || document.status === 'signed_pending_review')) return false;
+    if (activeFunnel === 'fees' && !`${c.actionRequired?.subscription || c.denbarAccount?.status || ''}`.toLowerCase().match(/pending|submitted|review|rejected/)) return false;
+    if (activeFunnel === 'stage4' && c.currentStage !== 4) return false;
+    if (activeFunnel === 'stage56' && c.currentStage < 5) return false;
 
     if (activeFilterTab === 'pending') {
       return c.accountStatus === 'pending_approval';
@@ -276,9 +291,47 @@ export default function AdminPage() {
       return;
     }
     const stageTitle = activeCandidate.stages[activeCandidate.currentStage - 1]?.title || 'Processing';
-    const message = `Hello ${activeCandidate.name}, this is SIRI Caseworker ${user.name} regarding your Danish Immigration Application (${activeCandidate.passportNumber}). Your status is currently at Stage ${activeCandidate.currentStage}: ${stageTitle}. Please log in to your portal to review official updates: https://denmarkrecruiter.netlify.app`;
+    const message = `Hello ${activeCandidate.name}, this is ${user.name} from your private recruitment coordination team regarding your application (${activeCandidate.passportNumber}). Current workflow: Stage ${activeCandidate.currentStage}, ${stageTitle}. Please log in to your candidate portal for updates.`;
     const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
     window.open(waUrl, '_blank');
+  };
+
+  const globalActivity = candidates.flatMap((candidate) => candidate.auditLog.map((log) => ({ candidate, log })))
+    .sort((left, right) => new Date(right.log.timestamp).getTime() - new Date(left.log.timestamp).getTime())
+    .slice(0, 25);
+
+  const funnelCounts: Record<FunnelKey, number> = {
+    all: candidates.length,
+    pending: candidates.filter((candidate) => candidate.accountStatus === 'pending_approval' || candidate.kycStatus === 'submitted' || candidate.kycStatus === 'pending').length,
+    documents: candidates.filter((candidate) => candidate.documents.some((document) => document.status === 'pending' || document.status === 'signed_pending_review')).length,
+    fees: candidates.filter((candidate) => /pending|submitted|review|rejected/i.test(candidate.actionRequired?.subscription || candidate.denbarAccount?.status || '')).length,
+    stage4: candidates.filter((candidate) => candidate.currentStage === 4).length,
+    stage56: candidates.filter((candidate) => candidate.currentStage >= 5).length,
+  };
+
+  const exportQueueCsv = () => {
+    const quote = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
+    const rows = [
+      ['Name', 'Email', 'Stage', 'Account status', 'KYC status', 'Service fee status', 'Employer', 'Sponsor reference', 'Case reference'],
+      ...filteredCandidates.map((candidate) => [
+        candidate.name,
+        candidate.email,
+        candidate.currentStage,
+        candidate.accountStatus,
+        candidate.kycStatus,
+        candidate.actionRequired?.subscription || candidate.denbarAccount?.status || '',
+        candidate.employer.name,
+        candidate.employer.sponsorCode,
+        candidate.siriCaseOrder.caseOrderId,
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(quote).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'private-recruitment-queue.csv';
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   if (!candidates.length) {
@@ -289,7 +342,7 @@ export default function AdminPage() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 rounded-xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
             <div>
               <h1 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
-                SIRI Caseworker Workspace
+                Private Recruitment Coordination Console
               </h1>
               <p className="text-xs text-slate-500 mt-1">No candidate records are currently available in the cloud.</p>
             </div>
@@ -347,11 +400,11 @@ export default function AdminPage() {
                 <ShieldCheck className="w-5 h-5" />
               </span>
               <h1 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
-                SIRI Caseworker Workspace &middot; Green Sector &amp; Seasonal Work Division
+                Private Recruitment Coordination Console &middot; Employer &amp; Candidate Services
               </h1>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Active Caseworker: <strong>{user.name}</strong> &middot; Copenhagen SIRI Processing Center
+              Active Coordinator: <strong>{user.name}</strong> &middot; Private candidate and employer coordination
             </p>
           </div>
 
@@ -404,6 +457,34 @@ export default function AdminPage() {
           </div>
         </div>
 
+        <section className="space-y-3" aria-label="Recruitment operations overview">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+            {([
+              ['all', 'Total Active Dossiers', 'All candidate files'],
+              ['pending', 'Pending Account / KYC Review', 'Accounts and profiles'],
+              ['documents', 'Documents & Agreements to Review', 'Uploaded or signed files'],
+              ['fees', 'Service Fee Receipts Pending', 'Review or correction'],
+              ['stage4', 'Stage 4 Interview Queue', 'Interview coordination'],
+              ['stage56', 'Stage 5/6 Readiness Queue', 'Final workflow stages'],
+            ] as [FunnelKey, string, string][]).map(([key, title, caption]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => { setActiveFunnel(key); setActiveFilterTab('all'); }}
+                className={`min-h-24 rounded-md border p-3 text-left transition-colors ${activeFunnel === key ? 'border-emerald-700 bg-emerald-50 ring-1 ring-emerald-700 dark:bg-emerald-950/30' : 'border-slate-200 bg-white hover:border-slate-400 dark:border-slate-800 dark:bg-slate-900'}`}
+              >
+                <span className="block text-[10px] font-semibold uppercase text-slate-500">{title}</span>
+                <strong className="mt-1 block text-2xl text-slate-900 dark:text-slate-100">{funnelCounts[key]}</strong>
+                <span className="mt-1 block text-[9px] text-slate-500">{caption}</span>
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" onClick={exportQueueCsv} className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold dark:border-slate-700 dark:bg-slate-900"><DownloadCloud className="h-3.5 w-3.5" />Export Queue (CSV)</button>
+            <button type="button" onClick={() => setIsActivityOpen(true)} className="inline-flex items-center gap-1.5 rounded-md bg-slate-800 px-3 py-2 text-xs font-bold text-white dark:bg-slate-200 dark:text-slate-900"><Activity className="h-3.5 w-3.5" />Global Activity Feed</button>
+          </div>
+        </section>
+
         {/* 3-Pane Workspace Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
           {/* ======================================================== */}
@@ -426,7 +507,7 @@ export default function AdminPage() {
               {/* Filter Tabs */}
               <div className="grid grid-cols-2 gap-1 text-[11px] font-bold">
                 <button
-                  onClick={() => setActiveFilterTab('all')}
+                  onClick={() => { setActiveFilterTab('all'); setActiveFunnel('all'); }}
                   className={`py-1.5 px-2 rounded-md transition-colors ${
                     activeFilterTab === 'all'
                       ? 'bg-brand-primary text-white shadow-sm'
@@ -436,7 +517,7 @@ export default function AdminPage() {
                   All ({candidates.length})
                 </button>
                 <button
-                  onClick={() => setActiveFilterTab('pending')}
+                  onClick={() => { setActiveFilterTab('pending'); setActiveFunnel('all'); }}
                   className={`py-1.5 px-2 rounded-md transition-colors ${
                     activeFilterTab === 'pending'
                       ? 'bg-amber-600 text-white shadow-sm'
@@ -446,7 +527,7 @@ export default function AdminPage() {
                   Pending Appr ({candidates.filter((c) => c.accountStatus === 'pending_approval').length})
                 </button>
                 <button
-                  onClick={() => setActiveFilterTab('action_required')}
+                  onClick={() => { setActiveFilterTab('action_required'); setActiveFunnel('all'); }}
                   className={`py-1.5 px-2 rounded-md transition-colors ${
                     activeFilterTab === 'action_required'
                       ? 'bg-blue-600 text-white shadow-sm'
@@ -456,7 +537,7 @@ export default function AdminPage() {
                   Action Req
                 </button>
                 <button
-                  onClick={() => setActiveFilterTab('approved')}
+                  onClick={() => { setActiveFilterTab('approved'); setActiveFunnel('all'); }}
                   className={`py-1.5 px-2 rounded-md transition-colors ${
                     activeFilterTab === 'approved'
                       ? 'bg-emerald-600 text-white shadow-sm'
@@ -840,6 +921,12 @@ export default function AdminPage() {
                             `Official statutory document record issued under Danish Green Sector labor agreements. File: ${activeDoc.filename}`}
                         </p>
 
+                        {activeDoc.fileUrl && (
+                          /\.(pdf|html?)($|\?)/i.test(activeDoc.filename) || activeDoc.fileType === 'application/pdf'
+                            ? <iframe title={`${activeDoc.title} preview`} src={activeDoc.fileUrl} className="mt-3 h-64 w-full rounded border border-slate-300 bg-white dark:border-slate-700" />
+                            : <img src={activeDoc.fileUrl} alt={`${activeDoc.title} uploaded file`} className="mt-3 max-h-64 max-w-full rounded border border-slate-300 object-contain dark:border-slate-700" />
+                        )}
+
                         {/* If document was signed by candidate, show signature proof */}
                         {activeDoc.signatureDataUrl && (
                           <div className="mt-3 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between gap-3">
@@ -913,6 +1000,8 @@ export default function AdminPage() {
           {/* (3 cols)                                                */}
           {/* ======================================================== */}
           <div className="lg:col-span-12 xl:col-span-3 space-y-4">
+            <PrivateDossierSummary candidate={activeCandidate} />
+            <AdminCaseTools candidate={activeCandidate} actor={user.name} />
             {/* Gated 6-Stage Controller */}
             <div className="bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 space-y-3">
               <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
@@ -968,6 +1057,11 @@ export default function AdminPage() {
                     </option>
                   ))}
                 </select>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {['Blurry / Unreadable Scan', 'All 4 Corners Must Be Visible', 'Name / DOB Mismatch', 'Europass CV Format Required', 'Unverifiable Transaction Reference'].map((reason) => (
+                    <button key={reason} type="button" onClick={() => { setRejectDocReason('custom'); setCustomRejectDocReason(reason); }} className="rounded border border-red-200 bg-red-50 px-2 py-1 text-[9px] font-semibold text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">{reason}</button>
+                  ))}
+                </div>
               </div>
 
               {/* Stage 5 Gate Note */}
@@ -1032,6 +1126,26 @@ export default function AdminPage() {
           </div>
         </div>
       </main>
+
+      {isActivityOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/50" onClick={() => setIsActivityOpen(false)}>
+          <aside className="ml-auto flex h-full w-full max-w-lg flex-col bg-white shadow-2xl dark:bg-slate-900" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-800">
+              <div><h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Global Activity Feed</h2><p className="mt-1 text-[10px] text-slate-500">Latest 25 candidate and agency events</p></div>
+              <button type="button" onClick={() => setIsActivityOpen(false)} aria-label="Close activity feed" className="rounded border p-1.5"><CloseIcon className="h-4 w-4" /></button>
+            </div>
+            <div className="flex-1 space-y-2 overflow-y-auto p-4">
+              {globalActivity.length ? globalActivity.map(({ candidate, log }) => (
+                <button key={`${candidate.id}-${log.id}`} type="button" onClick={() => { selectCandidate(candidate.id); setIsActivityOpen(false); }} className="w-full rounded-md border border-slate-200 p-3 text-left hover:border-emerald-600 dark:border-slate-800">
+                  <div className="flex items-start justify-between gap-2"><strong className="text-xs text-slate-900 dark:text-slate-100">{log.action}</strong><span className="shrink-0 text-[9px] text-slate-500">{new Date(log.timestamp).toLocaleString()}</span></div>
+                  <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-300">{candidate.name} · {log.details}</p>
+                  <p className="mt-1 text-[9px] text-slate-400">Coordinator: {log.actor}</p>
+                </button>
+              )) : <p className="py-8 text-center text-xs text-slate-500">No activity has been recorded yet.</p>}
+            </div>
+          </aside>
+        </div>
+      )}
 
       {/* Reject Document Modal */}
       {isRejectDocModalOpen && (
@@ -1165,6 +1279,11 @@ export default function AdminPage() {
               <label className="block font-bold text-slate-700 dark:text-slate-300">
                 Correction Instructions for Candidate
               </label>
+              <div className="flex flex-wrap gap-1.5">
+                {['Blurry / Unreadable Scan', 'All 4 Corners Must Be Visible', 'Name / DOB Mismatch', 'Europass CV Format Required', 'Unverifiable Transaction Reference'].map((reason) => (
+                  <button key={reason} type="button" onClick={() => setKycRejectionNote(reason)} className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[9px] font-semibold text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">{reason}</button>
+                ))}
+              </div>
               <textarea
                 rows={3}
                 value={kycRejectionNote}
@@ -1210,6 +1329,7 @@ export default function AdminPage() {
       <DocPreviewModal
         doc={activeDocForFullPreview}
         candidate={activeCandidate}
+        showKycComparison
         isOpen={!!activeDocForFullPreview}
         onClose={() => setActiveDocForFullPreview(null)}
       />

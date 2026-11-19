@@ -38,6 +38,14 @@
 }
 
 /* Print Stylesheet */
+.summary-label {
+  display: block;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 @media print {
   header,
   footer,
@@ -59,5 +67,39 @@
     box-shadow: none !important;
     border: none !important;
     padding: 0 !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .printable-dossier,
+  .printable-dossier * {
+    visibility: visible !important;
+  }
+
+  .printable-dossier header {
+    display: flex !important;
+  }
+
+  .printable-dossier footer {
+    display: block !important;
+  }
+
+  .printable-dossier {
+    position: absolute !important;
+    inset: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    border: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    color: #111827 !important;
+    background: #ffffff !important;
+  }
+
+  .print-summary-content {
+    color: #111827 !important;
   }
 }

@@ -12,10 +12,12 @@ import { LiveBriefingCard } from '@/components/portal/LiveBriefingCard';
 import { DocumentUploadCard } from '@/components/portal/DocumentUploadCard';
 import { ChecklistCard } from '@/components/portal/ChecklistCard';
 import { MandatoryOnboardingWizard, calculateCandidateReadiness, shouldOpenCandidateOnboarding } from '@/components/portal/MandatoryOnboardingWizard';
+import { CandidateProcessPanel } from '@/components/portal/CandidateProcessPanel';
 import { SignatureModal } from '@/components/portal/SignatureModal';
 import { DocumentSigningModal } from '@/components/portal/DocumentSigningModal';
 import { SeasonalAgriPortal } from '@/components/portal/SeasonalAgriPortal';
 import { DocPreviewModal } from '@/components/shared/DocPreviewModal';
+import { PrivateDossierSummary } from '@/components/shared/PrivateDossierSummary';
 import { generateAndDownloadVfsIcs } from '@/lib/icsGenerator';
 import { generateDocumentPdf } from '@/lib/pdfGenerator';
 import { DocumentRecord } from '@/types';
@@ -97,6 +99,8 @@ export default function CandidatePortalPage() {
       <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex flex-col transition-colors">
         <Header />
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-5">
+          <CandidateProcessPanel candidate={candidate} />
+          <PrivateDossierSummary candidate={candidate} />
           {showOnboarding ? (
             <MandatoryOnboardingWizard candidate={candidate} onViewTracker={() => setShowOnboarding(false)} />
           ) : (
@@ -172,6 +176,8 @@ export default function CandidatePortalPage() {
       <Header />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        <CandidateProcessPanel candidate={candidate} />
+        <PrivateDossierSummary candidate={candidate} />
         {showOnboarding ? (
           <MandatoryOnboardingWizard candidate={candidate} onViewTracker={() => setShowOnboarding(false)} />
         ) : (

@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { DocumentRecord, CandidateRecord } from '@/types';
 import { generateDocumentPdf } from '@/lib/pdfGenerator';
 import { useToast } from '@/context/ToastContext';
 import { useLanguage } from '@/context/LanguageContext';
-import { X, Download, ShieldCheck, FileText } from 'lucide-react';
+import { getSignedDocumentUrl } from '@/lib/supabase';
+import { X, Download, ShieldCheck, FileText, ZoomIn, ZoomOut, RotateCw, ExternalLink } from 'lucide-react';
 
 interface DocPreviewModalProps {
   doc: DocumentRecord | null;
@@ -13,6 +14,7 @@ interface DocPreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenSignatureModal?: () => void;
+  showKycComparison?: boolean;
 }
 
 export const DocPreviewModal: React.FC<DocPreviewModalProps> = ({
@@ -21,14 +23,42 @@ export const DocPreviewModal: React.FC<DocPreviewModalProps> = ({
   isOpen,
   onClose,
   onOpenSignatureModal,
+  showKycComparison = false,
 }) => {
   const { showToast } = useToast();
   const { t } = useLanguage();
   const [isGenerating, setIsGenerating] = useState(false);
+  const [signedUrl, setSignedUrl] = useState('');
+  const [zoom, setZoom] = useState(100);
+  const [rotation, setRotation] = useState(0);
+
+  useEffect(() => {
+    setZoom(100);
+    setRotation(0);
+    setSignedUrl(doc?.fileUrl || '');
+    if (doc?.storagePath) void getSignedDocumentUrl(doc.storagePath).then(setSignedUrl);
+  }, [doc]);
 
   if (!isOpen || !doc) return null;
 
-  const isSigned = doc.key === 'vfsletter' && !!candidate.signatureDataUrl;
+  const signature = doc.signatureDataUrl || (doc.key === 'vfsletter' ? candidate.signatureDataUrl : undefined);
+  const isSigned = Boolean(signature);
+  const previewUrl = signedUrl || doc.fileData || '';
+  const isPdf = doc.fileType === 'application/pdf' || /\.(pdf|html?)($|\?)/i.test(doc.filename);
+
+  const handleOpenOriginal = () => {
+    if (previewUrl) window.open(previewUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleDownloadOriginal = () => {
+    if (!previewUrl) return;
+    const anchor = document.createElement('a');
+    anchor.href = previewUrl;
+    anchor.download = doc.filename || doc.title;
+    anchor.target = '_blank';
+    anchor.rel = 'noreferrer';
+    anchor.click();
+  };
 
   const handleDownload = async () => {
     setIsGenerating(true);
@@ -117,19 +147,40 @@ export const DocPreviewModal: React.FC<DocPreviewModalProps> = ({
             </div>
 
             {/* Uploaded Scan Preview */}
-            {doc.fileData && doc.fileType?.startsWith('image/') && (
-              <div className="mt-4 p-2 bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700 text-center">
-                <span className="text-[10px] font-bold text-slate-400 uppercase block mb-2">Attached Scan</span>
-                <img
-                  src={doc.fileData}
-                  alt="Document Scan"
-                  className="max-h-60 mx-auto rounded shadow-sm object-contain"
-                />
+            {showKycComparison && (
+              <div className="my-4 grid grid-cols-2 gap-2 rounded border border-emerald-200 bg-emerald-50 p-3 text-xs dark:border-emerald-900 dark:bg-emerald-950/30">
+                <div><span className="summary-label">Candidate name</span>{candidate.name}</div>
+                <div><span className="summary-label">Date of birth</span>{candidate.dob}</div>
+                <div><span className="summary-label">Passport number</span>{candidate.passportNumber}</div>
+                <div><span className="summary-label">Nationality</span>{candidate.nationality}</div>
+                <div className="col-span-2"><span className="summary-label">Address</span>{candidate.permanentAddress}</div>
+              </div>
+            )}
+
+            {previewUrl && (
+              <div className="mt-4 overflow-hidden rounded border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-950">
+                <div className="no-print flex items-center justify-between border-b border-slate-200 bg-white px-3 py-2 text-[10px] dark:border-slate-700 dark:bg-slate-900">
+                  <span className="font-semibold text-slate-600 dark:text-slate-300">Private file preview</span>
+                  <div className="flex items-center gap-1">
+                    <button type="button" title="Zoom out" onClick={() => setZoom((value) => Math.max(50, value - 10))} className="rounded border p-1"><ZoomOut className="h-3.5 w-3.5" /></button>
+                    <span className="px-1 font-mono">{zoom}%</span>
+                    <button type="button" title="Zoom in" onClick={() => setZoom((value) => Math.min(200, value + 10))} className="rounded border p-1"><ZoomIn className="h-3.5 w-3.5" /></button>
+                    <button type="button" title="Rotate" onClick={() => setRotation((value) => (value + 90) % 360)} className="rounded border p-1"><RotateCw className="h-3.5 w-3.5" /></button>
+                    <button type="button" title="Open original" onClick={handleOpenOriginal} className="rounded border p-1"><ExternalLink className="h-3.5 w-3.5" /></button>
+                  </div>
+                </div>
+                <div className="flex max-h-[60vh] min-h-56 items-center justify-center overflow-auto p-2">
+                  {isPdf ? (
+                    <iframe title={`${doc.title} PDF preview`} src={previewUrl} className="h-[55vh] w-full bg-white" />
+                  ) : (
+                    <img src={previewUrl} alt={`${doc.title} preview`} className="max-h-[55vh] max-w-full object-contain" style={{ transform: `scale(${zoom / 100}) rotate(${rotation}deg)` }} />
+                  )}
+                </div>
               </div>
             )}
 
             {/* Signature Block */}
-            {doc.key === 'vfsletter' && (
+            {(doc.key === 'vfsletter' || signature) && (
               <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                 {isSigned ? (
                   <div className="flex items-center justify-between p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg border border-emerald-200 dark:border-emerald-800">
@@ -142,7 +193,7 @@ export const DocPreviewModal: React.FC<DocPreviewModalProps> = ({
                       </div>
                     </div>
                     <img
-                      src={candidate.signatureDataUrl}
+                      src={signature}
                       alt="Biometric Signature"
                       className="max-h-10 border-b border-slate-300 dark:border-slate-600 px-2"
                     />
@@ -188,6 +239,14 @@ export const DocPreviewModal: React.FC<DocPreviewModalProps> = ({
             className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
           >
             {t('cancel')}
+          </button>
+          <button
+            onClick={handleDownloadOriginal}
+            disabled={!previewUrl}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300"
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span>Download Original</span>
           </button>
           <button
             onClick={handleDownload}

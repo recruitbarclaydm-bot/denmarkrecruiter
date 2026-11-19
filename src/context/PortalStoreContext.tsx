@@ -11,6 +11,11 @@ import {
   NotificationItem,
   NewCandidateInput,
   NepalKycDetails,
+  CandidateProcessMetadata,
+  ServiceFeeTransaction,
+  VideoInterviewSchedule,
+  ApplicationCenterSchedule,
+  AdminCrmMetadata,
 } from '@/types';
 import { INITIAL_CANDIDATES } from '@/data/mockUsers';
 import { createEphemeralSupabaseClient, getSignedDocumentUrl, supabase } from '@/lib/supabase';
@@ -20,7 +25,15 @@ interface PortalStoreContextType {
   selectedCandidateId: string;
   selectedCandidate: CandidateRecord | null;
   isInitialized: boolean;
+  adminCrmMetadata: Record<string, AdminCrmMetadata>;
+  saveAdminCrmMetadata: (candidateId: string, metadata: AdminCrmMetadata) => Promise<void>;
   refreshStore: () => Promise<void>;
+  submitServiceFeeReceipt: (candidateId: string, file: File, transaction: ServiceFeeTransaction) => Promise<void>;
+  reviewServiceFeeReceipt: (candidateId: string, approved: boolean, reason?: string, actor?: string) => Promise<void>;
+  updateCandidateAgencyDetails: (candidateId: string, details: { balance?: string; status?: string; sponsorCode?: string; caseOrderId?: string; employerName?: string }, actor?: string) => Promise<void>;
+  updateCandidateProcessMeta: (candidateId: string, metadata: Partial<CandidateProcessMetadata>, actor?: string) => Promise<void>;
+  sendCandidateNotification: (candidateId: string, title: string, message: string, actor?: string) => Promise<void>;
+  createAgencyDocument: (candidateId: string, title: string, html: string, requiresSignature: boolean, actor?: string) => Promise<void>;
   uploadCandidateAvatar: (candidateId: string, file: File) => Promise<void>;
   uploadCoreDocument: (candidateId: string, name: string, category: string, file: File, existingDocumentId?: string) => Promise<void>;
   selectCandidate: (id: string) => void;
@@ -76,22 +89,28 @@ const serializeKycNote = (candidate: CandidateRecord) => JSON.stringify({
   schema: 'siri_kyc_v1',
   rejectionNote: candidate.kycNote || '',
   extended: candidate.extendedKyc || {},
+  process: Object.fromEntries(Object.entries(candidate.processMeta || {}).filter(
+    ([key]) => key !== 'coordinatorNotes' && key !== 'priority'
+  )),
 });
 
-const parseKycNote = (rawValue: unknown): { rejectionNote: string; extended: Partial<NepalKycDetails> } => {
-  if (typeof rawValue !== 'string' || !rawValue) return { rejectionNote: '', extended: {} };
+const parseKycNote = (rawValue: unknown): { rejectionNote: string; extended: Partial<NepalKycDetails>; process: CandidateProcessMetadata } => {
+  if (typeof rawValue !== 'string' || !rawValue) return { rejectionNote: '', extended: {}, process: {} };
   try {
     const parsed = JSON.parse(rawValue);
     if (parsed?.schema === 'siri_kyc_v1') {
       return {
         rejectionNote: typeof parsed.rejectionNote === 'string' ? parsed.rejectionNote : '',
         extended: parsed.extended && typeof parsed.extended === 'object' ? parsed.extended : {},
+        process: parsed.process && typeof parsed.process === 'object'
+          ? Object.fromEntries(Object.entries(parsed.process).filter(([key]) => key !== 'coordinatorNotes' && key !== 'priority'))
+          : {},
       };
     }
   } catch {
-    return { rejectionNote: rawValue, extended: {} };
+    return { rejectionNote: rawValue, extended: {}, process: {} };
   }
-  return { rejectionNote: rawValue, extended: {} };
+  return { rejectionNote: rawValue, extended: {}, process: {} };
 };
 
 const toUiDocumentStatus = (status: string): DocumentRecord['status'] => {
@@ -239,6 +258,20 @@ const mapCandidateRow = async (
       );
       const storagePath = document.storage_path as string | null;
       const fileUrl = storagePath ? await getSignedDocumentUrl(storagePath) : source?.fileUrl;
+      let signatureDataUrl: string | undefined;
+      let transactionDetails: ServiceFeeTransaction | undefined;
+      if (typeof document.signature_data === 'string' && document.signature_data) {
+        try {
+          const parsed = JSON.parse(document.signature_data);
+          if (parsed && typeof parsed === 'object' && 'transactionId' in parsed) {
+            transactionDetails = parsed as ServiceFeeTransaction;
+          } else {
+            signatureDataUrl = document.signature_data;
+          }
+        } catch {
+          signatureDataUrl = document.signature_data;
+        }
+      }
       return {
         ...(source || {}),
         id: document.id,
@@ -257,7 +290,8 @@ const mapCandidateRow = async (
         isCandidateUpload: document.direction === 'candidate_upload',
         isDispatchedByAdmin: document.direction === 'admin_dispatched',
         requiresSignature: Boolean(document.requires_signature),
-        signatureDataUrl: document.signature_data || undefined,
+        signatureDataUrl,
+        transactionDetails,
         body: source?.body || `Submitted document: ${document.name}.`,
       } as DocumentRecord;
     })
@@ -305,10 +339,11 @@ const mapCandidateRow = async (
       status: item.number < stage ? 'completed' : item.number === stage ? 'active' : 'pending',
     })),
     accountStatus: row.account_status,
-    accountRejectionReason: row.account_status === 'rejected' ? row.kyc_note || undefined : undefined,
+    accountRejectionReason: row.account_status === 'rejected' ? kycData.rejectionNote || undefined : undefined,
     kycStatus: row.kyc_status,
     kycNote: kycData.rejectionNote,
     extendedKyc: kycData.extended,
+    processMeta: kycData.process,
     avatarUrl,
     avatarStoragePath,
     employer: { ...base.employer, name: row.employer_name || base.employer.name, sponsorCode: row.sponsor_code || '' },
@@ -350,6 +385,7 @@ const mapCandidateRow = async (
 
 export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [candidates, setCandidates] = useState<CandidateRecord[]>([]);
+  const [adminCrmMetadata, setAdminCrmMetadata] = useState<Record<string, AdminCrmMetadata>>({});
   const candidatesRef = useRef<CandidateRecord[]>([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>('');
   const [isInitialized, setIsInitialized] = useState(false);
@@ -358,6 +394,7 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
     try {
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError || !authData.user) {
+        setAdminCrmMetadata({});
         candidatesRef.current = [];
         setCandidates([]);
         setSelectedCandidateId('');
@@ -371,10 +408,29 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
         .maybeSingle();
       if (profileError) throw profileError;
       if (!ownProfile) {
+        setAdminCrmMetadata({});
         candidatesRef.current = [];
         setCandidates([]);
         setSelectedCandidateId('');
         return;
+      }
+
+      if (ownProfile.role === 'admin') {
+        const { data: crmRows, error: crmError } = await supabase.from('notifications')
+          .select('title,message')
+          .eq('candidate_id', authData.user.id)
+          .like('title', 'crm:%');
+        if (crmError) throw crmError;
+        const crmMetadata = Object.fromEntries((crmRows || []).flatMap((row) => {
+          try {
+            return [[row.title.slice(4), JSON.parse(row.message) as AdminCrmMetadata]];
+          } catch {
+            return [];
+          }
+        }));
+        setAdminCrmMetadata(crmMetadata);
+      } else {
+        setAdminCrmMetadata({});
       }
 
       const candidateQuery = supabase.from('candidates').select('*').eq('role', 'candidate');
@@ -414,6 +470,7 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
         : hydrated[0]?.id || '');
     } catch (error) {
       console.error('Unable to load portal data from Supabase:', error);
+      setAdminCrmMetadata({});
       candidatesRef.current = [];
       setCandidates([]);
     } finally {
@@ -427,7 +484,19 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
       setIsInitialized(false);
       queueMicrotask(() => void refreshStore());
     });
-    return () => subscription.unsubscribe();
+    let realtimeChannel = supabase.channel(`portal-sync-${Math.random().toString(36).slice(2)}`);
+    for (const table of ['candidates', 'dossier_documents', 'notifications', 'audit_logs']) {
+      realtimeChannel = realtimeChannel.on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table,
+      }, () => queueMicrotask(() => void refreshStore()));
+    }
+    realtimeChannel.subscribe();
+    return () => {
+      subscription.unsubscribe();
+      void realtimeChannel.unsubscribe();
+    };
   }, [refreshStore]);
 
   const saveToStorage = (updated: CandidateRecord[], propagateError = false): Promise<void> => {
@@ -589,6 +658,243 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
       action,
       details,
     };
+  };
+
+  const submitServiceFeeReceipt = async (
+    candidateId: string,
+    file: File,
+    transaction: ServiceFeeTransaction
+  ) => {
+    if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      throw new Error('Choose a PDF, JPG, PNG, or WEBP receipt.');
+    }
+    if (file.size > 10 * 1024 * 1024) throw new Error('Receipt must be 10MB or smaller.');
+    const candidate = candidatesRef.current.find((item) => item.id === candidateId);
+    if (!candidate) throw new Error('Candidate profile is not available.');
+
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storagePath = `${candidateId}/receipt_${Date.now()}_${safeName}`;
+    const { error: uploadError } = await supabase.storage.from('dossier-documents').upload(storagePath, file, {
+      contentType: file.type,
+      upsert: false,
+    });
+    if (uploadError) throw uploadError;
+
+    const existing = candidate.documents.find((document) => document.category === 'subscription_receipt');
+    const documentRow = {
+      candidate_id: candidateId,
+      name: 'Service Fee Payment Receipt',
+      category: 'subscription_receipt',
+      direction: 'candidate_upload',
+      requires_signature: false,
+      status: 'pending',
+      rejection_reason: null,
+      storage_path: storagePath,
+      signature_data: JSON.stringify(transaction),
+      uploaded_at: new Date().toISOString(),
+    };
+    const documentResult = existing && /^[0-9a-f-]{36}$/i.test(existing.id)
+      ? await supabase.from('dossier_documents').update(documentRow).eq('id', existing.id)
+      : await supabase.from('dossier_documents').insert(documentRow);
+    if (documentResult.error) {
+      await supabase.storage.from('dossier-documents').remove([storagePath]);
+      throw documentResult.error;
+    }
+
+    const processMeta: CandidateProcessMetadata = {
+      ...candidate.processMeta,
+      serviceFeeTransaction: transaction,
+    };
+    const status = 'Service Fee Receipt Submitted (Under Review)';
+    const { error: profileError } = await supabase.from('candidates').update({
+      subscription_status: status,
+      kyc_note: serializeKycNote({ ...candidate, processMeta }),
+    }).eq('id', candidateId);
+    if (profileError) throw profileError;
+
+    const { error: auditError } = await supabase.from('audit_logs').insert({
+      candidate_id: candidateId,
+      actor: `${candidate.name} (Applicant)`,
+      action: 'Service Fee Receipt Submitted',
+      details: `Receipt uploaded: ${transaction.amount} by ${transaction.method}; reference ${transaction.transactionId}.`,
+    });
+    if (auditError) throw auditError;
+    await refreshStore();
+  };
+
+  const reviewServiceFeeReceipt = async (
+    candidateId: string,
+    approved: boolean,
+    reason = '',
+    actor = 'Recruitment Coordinator'
+  ) => {
+    const candidate = candidatesRef.current.find((item) => item.id === candidateId);
+    const receipt = candidate?.documents.find((document) => document.category === 'subscription_receipt');
+    if (!candidate || !receipt) throw new Error('No service-fee receipt is available to review.');
+    if (!approved && !reason.trim()) throw new Error('Enter a reason for rejecting this receipt.');
+
+    const status = approved ? '€45 Paid & Verified' : '€45 Rejected (Action Required)';
+    const { error: documentError } = await supabase.from('dossier_documents').update({
+      status: approved ? 'verified' : 'rejected',
+      rejection_reason: approved ? null : reason.trim(),
+    }).eq('id', receipt.id).eq('candidate_id', candidateId);
+    if (documentError) throw documentError;
+
+    const { error: profileError } = await supabase.from('candidates').update({ subscription_status: status }).eq('id', candidateId);
+    if (profileError) throw profileError;
+
+    const title = approved ? 'Service Fee Receipt Approved' : 'Service Fee Receipt Requires Correction';
+    const message = approved
+      ? 'Your service-fee receipt has been reviewed and verified by the recruitment coordinator.'
+      : `Your service-fee receipt could not be verified: ${reason.trim()}. Please upload a corrected receipt.`;
+    const [{ error: notificationError }, { error: auditError }] = await Promise.all([
+      supabase.from('notifications').insert({ candidate_id: candidateId, title, message, is_read: false }),
+      supabase.from('audit_logs').insert({
+        candidate_id: candidateId,
+        actor,
+        action: approved ? 'Service Fee Receipt Approved' : 'Service Fee Receipt Rejected',
+        details: approved ? 'Receipt verified and account fee status updated.' : `Receipt rejected: ${reason.trim()}`,
+      }),
+    ]);
+    if (notificationError) throw notificationError;
+    if (auditError) throw auditError;
+    await refreshStore();
+  };
+
+  const updateCandidateAgencyDetails = async (
+    candidateId: string,
+    details: { balance?: string; status?: string; sponsorCode?: string; caseOrderId?: string; employerName?: string },
+    actor = 'Recruitment Coordinator'
+  ) => {
+    const candidate = candidatesRef.current.find((item) => item.id === candidateId);
+    if (!candidate) throw new Error('Candidate profile is not available.');
+    const updated: CandidateRecord = {
+      ...candidate,
+      employer: {
+        ...candidate.employer,
+        name: details.employerName ?? candidate.employer.name,
+        sponsorCode: details.sponsorCode ?? candidate.employer.sponsorCode,
+      },
+      siriCaseOrder: { ...candidate.siriCaseOrder, caseOrderId: details.caseOrderId ?? candidate.siriCaseOrder.caseOrderId },
+      denbarAccount: candidate.denbarAccount ? {
+        ...candidate.denbarAccount,
+        amount: details.balance ?? candidate.denbarAccount.amount,
+        status: details.status ?? candidate.denbarAccount.status,
+      } : {
+        amount: details.balance || '€0.00',
+        status: details.status || 'Not set',
+        vfsFee: 'Not applicable',
+        linkedTo: 'Candidate account',
+      },
+      actionRequired: candidate.actionRequired ? {
+        ...candidate.actionRequired,
+        subscription: details.status ?? candidate.actionRequired.subscription,
+      } : details.status ? {
+        facialTime: '', task: '', subscription: details.status,
+      } : undefined,
+      auditLog: [createAuditEntry(actor, 'Agency Profile Details Updated', JSON.stringify(details)), ...candidate.auditLog],
+    };
+    await saveToStorage(candidatesRef.current.map((item) => item.id === candidateId ? updated : item), true);
+  };
+
+  const updateCandidateProcessMeta = async (
+    candidateId: string,
+    metadata: Partial<CandidateProcessMetadata>,
+    actor = 'Recruitment Coordinator'
+  ) => {
+    const candidate = candidatesRef.current.find((item) => item.id === candidateId);
+    if (!candidate) throw new Error('Candidate profile is not available.');
+    const processMeta: CandidateProcessMetadata = { ...candidate.processMeta, ...metadata };
+    const updated = {
+      ...candidate,
+      processMeta,
+      auditLog: [createAuditEntry(actor, 'Candidate Process Metadata Updated', JSON.stringify(metadata)), ...candidate.auditLog],
+    };
+    await saveToStorage(candidatesRef.current.map((item) => item.id === candidateId ? updated : item), true);
+  };
+
+  const sendCandidateNotification = async (
+    candidateId: string,
+    title: string,
+    message: string,
+    actor = 'Recruitment Coordinator'
+  ) => {
+    const candidate = candidatesRef.current.find((item) => item.id === candidateId);
+    if (!candidate) throw new Error('Candidate profile is not available.');
+    const updated = {
+      ...candidate,
+      notifications: [pushNotification(candidate, title, message), ...candidate.notifications],
+      auditLog: [createAuditEntry(actor, 'Portal Notification Sent', `${title}: ${message}`), ...candidate.auditLog],
+    };
+    await saveToStorage(candidatesRef.current.map((item) => item.id === candidateId ? updated : item), true);
+  };
+
+  const saveAdminCrmMetadata = async (candidateId: string, metadata: AdminCrmMetadata) => {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData.user) throw new Error('Coordinator authentication is required.');
+    const title = `crm:${candidateId}`;
+    const { data: existing, error: lookupError } = await supabase.from('notifications')
+      .select('id')
+      .eq('candidate_id', authData.user.id)
+      .eq('title', title)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    const result = existing
+      ? await supabase.from('notifications').update({ message: JSON.stringify(metadata), is_read: true }).eq('id', existing.id)
+      : await supabase.from('notifications').insert({
+          candidate_id: authData.user.id,
+          title,
+          message: JSON.stringify(metadata),
+          is_read: true,
+        });
+    if (result.error) throw result.error;
+    setAdminCrmMetadata((current) => ({ ...current, [candidateId]: metadata }));
+  };
+
+  const createAgencyDocument = async (
+    candidateId: string,
+    title: string,
+    html: string,
+    requiresSignature: boolean,
+    actor = 'Recruitment Coordinator'
+  ) => {
+    const candidate = candidatesRef.current.find((item) => item.id === candidateId);
+    if (!candidate) throw new Error('Candidate profile is not available.');
+    const fileName = `${title.replace(/[^a-zA-Z0-9._-]/g, '_')}.html`;
+    const storagePath = `${candidateId}/agency_${Date.now()}_${fileName}`;
+    const { error: uploadError } = await supabase.storage.from('dossier-documents').upload(
+      storagePath,
+      new Blob([html], { type: 'text/html;charset=utf-8' }),
+      { contentType: 'text/html;charset=utf-8', upsert: false }
+    );
+    if (uploadError) throw uploadError;
+    const { error: documentError } = await supabase.from('dossier_documents').insert({
+      candidate_id: candidateId,
+      name: title,
+      category: 'agency_document',
+      direction: 'admin_dispatched',
+      requires_signature: requiresSignature,
+      status: requiresSignature ? 'awaiting_signature' : 'pending',
+      storage_path: storagePath,
+      signature_data: null,
+      uploaded_at: new Date().toISOString(),
+    });
+    if (documentError) {
+      await supabase.storage.from('dossier-documents').remove([storagePath]);
+      throw documentError;
+    }
+    const [{ error: notificationError }, { error: auditError }] = await Promise.all([
+      supabase.from('notifications').insert({
+        candidate_id: candidateId,
+        title: requiresSignature ? 'Agency Agreement Requires Your Signature' : 'New Agency Document Available',
+        message: `A private recruitment agency document, "${title}", is available in your dossier.`,
+        is_read: false,
+      }),
+      supabase.from('audit_logs').insert({ candidate_id: candidateId, actor, action: 'Agency Document Generated', details: title }),
+    ]);
+    if (notificationError) throw notificationError;
+    if (auditError) throw auditError;
+    await refreshStore();
   };
 
   // Account Approval for Registration
@@ -1376,7 +1682,15 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
         selectedCandidateId,
         selectedCandidate,
         isInitialized,
+        adminCrmMetadata,
+        saveAdminCrmMetadata,
         refreshStore,
+        submitServiceFeeReceipt,
+        reviewServiceFeeReceipt,
+        updateCandidateAgencyDetails,
+        updateCandidateProcessMeta,
+        sendCandidateNotification,
+        createAgencyDocument,
         uploadCandidateAvatar,
         uploadCoreDocument,
         selectCandidate,
