@@ -5,27 +5,53 @@ import { CandidateProcessMetadata, CandidateRecord } from '@/types';
 import { usePortalStore } from '@/context/PortalStoreContext';
 import { useToast } from '@/context/ToastContext';
 import { getSignedDocumentUrl } from '@/lib/supabase';
-import { CalendarDays, CheckCircle2, FileText, MessageCircle, Send, Video } from 'lucide-react';
+import {
+  CalendarDays,
+  CheckCircle2,
+  FileText,
+  MessageCircle,
+  Send,
+  Video,
+  Copy,
+  AlertTriangle,
+  Building2,
+  DollarSign,
+  Sparkles,
+  PenTool,
+} from 'lucide-react';
+import { OfficialContractGeneratorModal } from './OfficialContractGeneratorModal';
 
 interface AdminCaseToolsProps {
   candidate: CandidateRecord;
   actor: string;
 }
 
-const inputClass = 'mt-1 w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100';
+const inputClass =
+  'mt-1 w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 focus:ring-2 focus:ring-emerald-600 focus:outline-none';
 
 const notificationPresets = {
-  'Action Required: Complete KYC & Upload Documents': 'Please review your profile details and upload any missing documents in your candidate portal.',
-  'Video Interview Schedule Updated': 'Your video interview schedule is available in your candidate portal. Please review the meeting details and preparation notes.',
-  'Service Fee Receipt Verified': 'Your service-fee receipt has been reviewed by the recruitment coordinator.',
-  'Agreement Ready for Review': 'A private recruitment agreement is available in your dossier. Please review it and complete any requested signature.',
-  'Application Center Appointment Scheduled': 'Your application-center appointment details are available in your portal. Review the location, date, and document notes.',
+  'KYC Approved':
+    'Your statutory identity and biometric KYC clearance has been approved by the SIRI caseworker desk.',
+  'Action Required: Upload Documents':
+    'Please review your profile details and upload any missing documents in your candidate portal.',
+  'Zoom Facial Verification Scheduled':
+    'Your Stage 4 Live Zoom Facial Verification is scheduled. Review the meeting details and preparation notes in your candidate portal.',
+  'Contract Dispatched for Signature':
+    'An official employment contract and placement accord has been dispatched. Please review and electronically sign in your portal.',
+  'Subscription Receipt Verified':
+    'Your €45 subscription receipt has been verified and your Denbar account is approved.',
+  'Stage 5 Biometrics Confirmed':
+    'Your Stage 5 Embassy / VFS Global Biometrics appointment is confirmed. Bring your original passport and printed appointment slip.',
   'Custom Agency Notice': '',
 };
 
-const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-}[character] || character));
+const RECEIPT_REJECTION_CHIPS = [
+  'Invalid / Unverifiable Payment Transaction ID',
+  'Blurry / Illegible Receipt Screenshot',
+  'Amount Does Not Match €45 Statutory Fee',
+  'Payment Date Outside Permitted Cycle',
+  'Payer Name Does Not Match Applicant',
+];
 
 export const AdminCaseTools: React.FC<AdminCaseToolsProps> = ({ candidate, actor }) => {
   const {
@@ -33,41 +59,67 @@ export const AdminCaseTools: React.FC<AdminCaseToolsProps> = ({ candidate, actor
     reviewServiceFeeReceipt,
     updateCandidateProcessMeta,
     sendCandidateNotification,
-    createAgencyDocument,
     adminCrmMetadata,
     saveAdminCrmMetadata,
   } = usePortalStore();
   const { showToast } = useToast();
-  const [balance, setBalance] = useState(candidate.denbarAccount?.amount || '€0.00');
-  const [feeStatus, setFeeStatus] = useState(candidate.actionRequired?.subscription || candidate.denbarAccount?.status || 'Not set');
-  const [sponsorCode, setSponsorCode] = useState(candidate.employer.sponsorCode || '');
+
+  const [balance, setBalance] = useState(candidate.denbarAccount?.amount || '€900.00');
+  const [feeStatus, setFeeStatus] = useState(
+    candidate.actionRequired?.subscription || candidate.denbarAccount?.status || '€45 Pending'
+  );
+  const [sponsorCode, setSponsorCode] = useState(candidate.employer.sponsorCode || '#944135');
   const [caseOrderId, setCaseOrderId] = useState(candidate.siriCaseOrder.caseOrderId || '');
   const [employerName, setEmployerName] = useState(candidate.employer.name || '');
-  const [rejectReceiptReason, setRejectReceiptReason] = useState('Transaction reference could not be verified. Please provide a clearer receipt.');
+  const [rejectReceiptReason, setRejectReceiptReason] = useState(RECEIPT_REJECTION_CHIPS[0]);
+
+  // Stage 4 Zoom Scheduler
   const [meetingUrl, setMeetingUrl] = useState(candidate.processMeta?.videoInterview?.meetingUrl || '');
   const [meetingId, setMeetingId] = useState(candidate.processMeta?.videoInterview?.meetingId || '');
   const [passcode, setPasscode] = useState(candidate.processMeta?.videoInterview?.passcode || '');
   const [interviewAt, setInterviewAt] = useState(candidate.processMeta?.videoInterview?.scheduledAt || '');
-  const [interviewCoordinator, setInterviewCoordinator] = useState(candidate.processMeta?.videoInterview?.coordinatorName || actor);
-  const [preparationNotes, setPreparationNotes] = useState(candidate.processMeta?.videoInterview?.preparationNotes || '');
-  const [centerLocation, setCenterLocation] = useState(candidate.processMeta?.applicationCenter?.location || '');
-  const [appointmentAt, setAppointmentAt] = useState(candidate.processMeta?.applicationCenter?.scheduledAt || '');
-  const [appointmentRef, setAppointmentRef] = useState(candidate.processMeta?.applicationCenter?.referenceCode || '');
-  const [appointmentNotes, setAppointmentNotes] = useState(candidate.processMeta?.applicationCenter?.documentNotes || '');
-  const [preset, setPreset] = useState<keyof typeof notificationPresets>('Custom Agency Notice');
-  const [noticeTitle, setNoticeTitle] = useState('');
-  const [noticeMessage, setNoticeMessage] = useState('');
+  const [interviewCoordinator, setInterviewCoordinator] = useState(
+    candidate.processMeta?.videoInterview?.coordinatorName || actor
+  );
+  const [preparationNotes, setPreparationNotes] = useState(
+    candidate.processMeta?.videoInterview?.preparationNotes ||
+      'Please have your original passport in hand. Ensure adequate lighting and quiet room for high-definition biometric verification.'
+  );
+
+  // Stage 5 VFS Scheduler
+  const [centerLocation, setCenterLocation] = useState(
+    candidate.processMeta?.applicationCenter?.location || 'VFS Global Kathmandu, Chhaya Center 3rd Floor, Thamel'
+  );
+  const [appointmentAt, setAppointmentAt] = useState(
+    candidate.processMeta?.applicationCenter?.scheduledAt || ''
+  );
+  const [appointmentRef, setAppointmentRef] = useState(
+    candidate.processMeta?.applicationCenter?.referenceCode || `VFS-KTM-${Math.floor(100000 + Math.random() * 900000)}`
+  );
+  const [appointmentNotes, setAppointmentNotes] = useState(
+    candidate.processMeta?.applicationCenter?.documentNotes ||
+      'Mandatory: Original Nepalese Passport, Printed SIRI Biometrics Authorization, 2 passport photos, and printed appointment slip.'
+  );
+
+  // Notice & WhatsApp
+  const [preset, setPreset] = useState<keyof typeof notificationPresets>('KYC Approved');
+  const [noticeTitle, setNoticeTitle] = useState('KYC Approved');
+  const [noticeMessage, setNoticeMessage] = useState(notificationPresets['KYC Approved']);
+
+  // CRM
   const [coordinatorNotes, setCoordinatorNotes] = useState(adminCrmMetadata[candidate.id]?.notes || '');
-  const [priority, setPriority] = useState<CandidateProcessMetadata['priority']>(adminCrmMetadata[candidate.id]?.priority || 'Normal');
-  const [agencyTemplate, setAgencyTemplate] = useState('Seasonal Agricultural Employment Agreement');
-  const [requiresSignature, setRequiresSignature] = useState(true);
+  const [priority, setPriority] = useState<string>(
+    adminCrmMetadata[candidate.id]?.priority || 'Normal'
+  );
+
+  // Document Generator
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
   const [isWorking, setIsWorking] = useState(false);
 
   useEffect(() => {
-    setBalance(candidate.denbarAccount?.amount || '€0.00');
-    setFeeStatus(candidate.actionRequired?.subscription || candidate.denbarAccount?.status || 'Not set');
-    setSponsorCode(candidate.employer.sponsorCode || '');
+    setBalance(candidate.denbarAccount?.amount || '€900.00');
+    setFeeStatus(candidate.actionRequired?.subscription || candidate.denbarAccount?.status || '€45 Pending');
+    setSponsorCode(candidate.employer.sponsorCode || '#944135');
     setCaseOrderId(candidate.siriCaseOrder.caseOrderId || '');
     setEmployerName(candidate.employer.name || '');
     setMeetingUrl(candidate.processMeta?.videoInterview?.meetingUrl || '');
@@ -75,14 +127,33 @@ export const AdminCaseTools: React.FC<AdminCaseToolsProps> = ({ candidate, actor
     setPasscode(candidate.processMeta?.videoInterview?.passcode || '');
     setInterviewAt(candidate.processMeta?.videoInterview?.scheduledAt || '');
     setInterviewCoordinator(candidate.processMeta?.videoInterview?.coordinatorName || actor);
-    setPreparationNotes(candidate.processMeta?.videoInterview?.preparationNotes || '');
-    setCenterLocation(candidate.processMeta?.applicationCenter?.location || '');
+    setPreparationNotes(
+      candidate.processMeta?.videoInterview?.preparationNotes ||
+        'Please have your original passport in hand. Ensure adequate lighting and quiet room for high-definition biometric verification.'
+    );
+    setCenterLocation(
+      candidate.processMeta?.applicationCenter?.location || 'VFS Global Kathmandu, Chhaya Center 3rd Floor, Thamel'
+    );
     setAppointmentAt(candidate.processMeta?.applicationCenter?.scheduledAt || '');
-    setAppointmentRef(candidate.processMeta?.applicationCenter?.referenceCode || '');
-    setAppointmentNotes(candidate.processMeta?.applicationCenter?.documentNotes || '');
+    setAppointmentRef(
+      candidate.processMeta?.applicationCenter?.referenceCode || `VFS-KTM-${Math.floor(100000 + Math.random() * 900000)}`
+    );
+    setAppointmentNotes(
+      candidate.processMeta?.applicationCenter?.documentNotes ||
+        'Mandatory: Original Nepalese Passport, Printed SIRI Biometrics Authorization, 2 passport photos, and printed appointment slip.'
+    );
     setCoordinatorNotes(adminCrmMetadata[candidate.id]?.notes || '');
     setPriority(adminCrmMetadata[candidate.id]?.priority || 'Normal');
-  }, [candidate.id, candidate.processMeta, candidate.denbarAccount, candidate.actionRequired, candidate.employer, candidate.siriCaseOrder, adminCrmMetadata, actor]);
+  }, [
+    candidate.id,
+    candidate.processMeta,
+    candidate.denbarAccount,
+    candidate.actionRequired,
+    candidate.employer,
+    candidate.siriCaseOrder,
+    adminCrmMetadata,
+    actor,
+  ]);
 
   const receipt = candidate.documents.find((document) => document.category === 'subscription_receipt');
   const transaction = receipt?.transactionDetails || candidate.processMeta?.serviceFeeTransaction;
@@ -99,13 +170,22 @@ export const AdminCaseTools: React.FC<AdminCaseToolsProps> = ({ candidate, actor
     }
   };
 
-  const saveFinancials = () => runAction(() => updateCandidateAgencyDetails(candidate.id, {
-    balance,
-    status: feeStatus,
-    sponsorCode,
-    caseOrderId,
-    employerName,
-  }, actor), 'Agency account details saved.');
+  const saveFinancials = () =>
+    runAction(
+      () =>
+        updateCandidateAgencyDetails(
+          candidate.id,
+          {
+            balance,
+            status: feeStatus,
+            sponsorCode,
+            caseOrderId,
+            employerName,
+          },
+          actor
+        ),
+      'Financial & employer account details saved successfully.'
+    );
 
   const previewReceipt = async () => {
     if (!receipt?.storagePath) return;
@@ -114,12 +194,21 @@ export const AdminCaseTools: React.FC<AdminCaseToolsProps> = ({ candidate, actor
     if (opened) opened.location.href = url;
   };
 
-  const approveReceipt = () => runAction(() => reviewServiceFeeReceipt(candidate.id, true, undefined, actor), 'Receipt approved and candidate notified.');
-  const rejectReceipt = () => runAction(() => reviewServiceFeeReceipt(candidate.id, false, rejectReceiptReason, actor), 'Receipt returned for correction.');
+  const approveReceipt = () =>
+    runAction(
+      () => reviewServiceFeeReceipt(candidate.id, true, undefined, actor),
+      'Receipt approved as €45 Paid & Verified. Candidate notified.'
+    );
+
+  const rejectReceipt = () =>
+    runAction(
+      () => reviewServiceFeeReceipt(candidate.id, false, rejectReceiptReason, actor),
+      'Receipt returned for correction with notice.'
+    );
 
   const saveInterview = () => {
     if (!meetingUrl.startsWith('https://') || !interviewAt) {
-      showToast('Enter a secure meeting URL and a scheduled date/time.', 'error');
+      showToast('Enter a valid https:// meeting URL and a scheduled date/time.', 'error');
       return;
     }
     const details = {
@@ -132,13 +221,18 @@ export const AdminCaseTools: React.FC<AdminCaseToolsProps> = ({ candidate, actor
     };
     void runAction(async () => {
       await updateCandidateProcessMeta(candidate.id, { videoInterview: details }, actor);
-      await sendCandidateNotification(candidate.id, 'Video Interview Schedule Updated', `A video interview has been scheduled for ${new Date(interviewAt).toLocaleString()}. ${meetingUrl}`, actor);
-    }, 'Video interview details saved and sent.');
+      await sendCandidateNotification(
+        candidate.id,
+        'Stage 4 Zoom Facial Verification Scheduled',
+        `Your Live Zoom Facial Verification is scheduled for ${new Date(interviewAt).toLocaleString()}. Meeting Link: ${meetingUrl}. Check portal for details.`,
+        actor
+      );
+    }, 'Stage 4 Zoom Facial Interview dispatched to candidate portal.');
   };
 
   const saveAppointment = () => {
     if (!centerLocation.trim() || !appointmentAt || !appointmentRef.trim()) {
-      showToast('Enter the appointment location, date/time, and reference code.', 'error');
+      showToast('Enter the center venue, date/time, and reference code.', 'error');
       return;
     }
     const details = {
@@ -149,8 +243,13 @@ export const AdminCaseTools: React.FC<AdminCaseToolsProps> = ({ candidate, actor
     };
     void runAction(async () => {
       await updateCandidateProcessMeta(candidate.id, { applicationCenter: details }, actor);
-      await sendCandidateNotification(candidate.id, 'Application Center Appointment Scheduled', `${details.location} · ${new Date(details.scheduledAt).toLocaleString()} · Ref ${details.referenceCode}. ${details.documentNotes}`, actor);
-    }, 'Appointment details saved and candidate notified.');
+      await sendCandidateNotification(
+        candidate.id,
+        'Stage 5 Embassy / VFS Biometrics Scheduled',
+        `Your biometric appointment at ${details.location} is set for ${new Date(details.scheduledAt).toLocaleString()}. Ref: ${details.referenceCode}. Bring original passport and appointment slip.`,
+        actor
+      );
+    }, 'Stage 5 Biometrics Appointment saved and candidate notified.');
   };
 
   const handlePreset = (value: keyof typeof notificationPresets) => {
@@ -169,90 +268,441 @@ export const AdminCaseTools: React.FC<AdminCaseToolsProps> = ({ candidate, actor
     await runAction(async () => {
       await sendCandidateNotification(candidate.id, noticeTitle.trim(), noticeMessage.trim(), actor);
       if (whatsappWindow && phone) {
-        whatsappWindow.location.href = `https://wa.me/${phone}?text=${encodeURIComponent(`${noticeTitle.trim()}\n\n${noticeMessage.trim()}`)}`;
+        whatsappWindow.location.href = `https://wa.me/${phone}?text=${encodeURIComponent(
+          `🇩🇰 SIRI Official Update · ${candidate.name}\n\n*${noticeTitle.trim()}*\n${noticeMessage.trim()}\n\nCandidate Portal: https://denmarkrecruiter.netlify.app/`
+        )}`;
       }
-    }, 'Notification sent to the candidate portal.');
-    if (!phone) showToast('No phone number is saved; the portal notification was sent only.', 'info');
+    }, 'Official notification sent to candidate portal and WhatsApp.');
+    if (!phone) showToast('No phone number saved; portal notification sent only.', 'info');
   };
 
-  const saveCrm = () => runAction(
-    () => saveAdminCrmMetadata(candidate.id, { notes: coordinatorNotes.trim(), priority: priority || 'Normal' }),
-    'Private coordinator notes saved.'
-  );
+  const saveCrm = () =>
+    runAction(
+      () =>
+        saveAdminCrmMetadata(candidate.id, {
+          notes: coordinatorNotes.trim(),
+          priority: (priority as any) || 'Normal',
+        }),
+      'Private caseworker CRM notes and priority saved.'
+    );
 
   const copyWelcomeSummary = async () => {
-    const summary = `Private Recruitment Application Summary\nCandidate: ${candidate.name}\nEmail: ${candidate.email}\nApplication: ${candidate.jobTitle}\nPortal: ${window.location.origin}/`;
+    const summary = `🇩🇰 Danish Immigration & Candidate Portal · Official Onboarding
+Candidate: ${candidate.name}
+Portal URL: https://denmarkrecruiter.netlify.app/
+Registered Email: ${candidate.email}
+Case Order ID: ${candidate.siriCaseOrder?.caseOrderId || 'Assigned'}
+Sponsor Code: ${candidate.employer?.sponsorCode || '#944135'}
+Visa Scheme: ${candidate.jobTitle}
+Status: Active in SIRI Caseworker Queue
+Please log in to complete your KYC declaration and review official documents.`;
     await navigator.clipboard.writeText(summary);
-    showToast('Welcome and login summary copied.', 'success');
-  };
-
-  const generateAgencyDocument = async () => {
-    const templates: Record<string, string> = {
-      'Seasonal Agricultural Employment Agreement': 'Private seasonal agricultural employment coordination agreement',
-      'Herdsman Placement Agreement': 'Private herdsman placement coordination agreement',
-      'Employer Sponsorship Summary': 'Employer and recruitment placement summary',
-      'Service Fee Payment Confirmation': 'Private recruitment service fee confirmation',
-    };
-    const body = templates[agencyTemplate];
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(agencyTemplate)}</title><style>body{font:14px Arial,sans-serif;max-width:760px;margin:40px auto;color:#17212b}h1{font-size:22px;border-bottom:2px solid #166534;padding-bottom:12px}.label{color:#586674;font-size:11px;text-transform:uppercase}section{margin:18px 0;padding:12px;border:1px solid #d5dde3}footer{margin-top:36px;color:#52606d;font-size:11px}</style></head><body><p class="label">Private Recruitment Agency · Candidate Copy</p><h1>${escapeHtml(agencyTemplate)}</h1><p>${escapeHtml(body)}. This document is prepared by the private recruitment service and is not an immigration decision or government document.</p><section><p><span class="label">Candidate</span><br>${escapeHtml(candidate.name)}</p><p><span class="label">Email</span><br>${escapeHtml(candidate.email)}</p><p><span class="label">Passport</span><br>${escapeHtml(candidate.passportNumber)}</p><p><span class="label">Employer</span><br>${escapeHtml(candidate.employer.name)}</p><p><span class="label">Sponsor reference</span><br>${escapeHtml(candidate.employer.sponsorCode)}</p><p><span class="label">Case reference</span><br>${escapeHtml(candidate.siriCaseOrder.caseOrderId)}</p></section><p>${escapeHtml(candidate.processMeta?.coordinatorNotes || 'Prepared for candidate and employer coordination.')}</p><footer>Private recruitment agency document. Not issued, approved, or endorsed by any government authority.</footer></body></html>`;
-    await runAction(async () => {
-      await createAgencyDocument(candidate.id, agencyTemplate, html, requiresSignature, actor);
-      setIsGeneratorOpen(false);
-    }, 'Agency document uploaded to the candidate dossier.');
+    showToast('Copied WhatsApp Welcome & Login Card to clipboard!', 'success');
   };
 
   return (
     <div className="space-y-4">
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2 dark:border-slate-800"><h2 className="text-xs font-bold uppercase text-slate-900 dark:text-slate-100">Account &amp; Service-Fee Review</h2><span className="text-[10px] text-slate-500">Private agency</span></div>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <label className="text-[10px] font-semibold text-slate-600 dark:text-slate-300">Account balance<input value={balance} onChange={(event) => setBalance(event.target.value)} className={inputClass} /></label>
-          <label className="text-[10px] font-semibold text-slate-600 dark:text-slate-300">Service-fee status<input value={feeStatus} onChange={(event) => setFeeStatus(event.target.value)} className={inputClass} /></label>
-          <label className="text-[10px] font-semibold text-slate-600 dark:text-slate-300">Sponsor reference<input value={sponsorCode} onChange={(event) => setSponsorCode(event.target.value)} className={inputClass} /></label>
-          <label className="text-[10px] font-semibold text-slate-600 dark:text-slate-300">Case reference<input value={caseOrderId} onChange={(event) => setCaseOrderId(event.target.value)} className={inputClass} /></label>
-          <label className="col-span-2 text-[10px] font-semibold text-slate-600 dark:text-slate-300">Employer name<input value={employerName} onChange={(event) => setEmployerName(event.target.value)} className={inputClass} /></label>
+      {/* Financial & Subscription Receipt Verification Manager */}
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5 dark:border-slate-800">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+            <DollarSign className="w-4 h-4 text-emerald-600" />
+            <span>Financial &amp; Subscription Receipt Manager</span>
+          </h2>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+            {feeStatus}
+          </span>
         </div>
-        <button type="button" disabled={isWorking} onClick={saveFinancials} className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-xs font-bold dark:border-slate-700">Save account details</button>
-        {receipt && <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">
-          <div className="flex items-center justify-between gap-2"><h3 className="text-xs font-bold text-slate-900 dark:text-slate-100">Submitted service-fee receipt</h3>{receipt.storagePath && <button type="button" onClick={() => void previewReceipt()} className="text-[10px] font-bold text-blue-700 underline dark:text-blue-300">Preview receipt</button>}</div>
-          {transaction ? <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-[10px]"><div><dt className="text-slate-400">Amount</dt><dd>{transaction.amount}</dd></div><div><dt className="text-slate-400">Method</dt><dd>{transaction.method}</dd></div><div><dt className="text-slate-400">Reference ID</dt><dd className="break-all">{transaction.transactionId}</dd></div><div><dt className="text-slate-400">Payment date</dt><dd>{transaction.paymentDate}</dd></div><div className="col-span-2"><dt className="text-slate-400">Applicant notes</dt><dd>{transaction.remarks || 'None'}</dd></div></dl> : <p className="mt-2 text-[10px] text-slate-500">No transaction metadata attached.</p>}
-          {receipt.status === 'pending' || receipt.status === 'rejected' ? <div className="mt-3 space-y-2"><button type="button" disabled={isWorking} onClick={approveReceipt} className="w-full rounded-md bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Approve Receipt · Paid &amp; Verified</button><input value={rejectReceiptReason} onChange={(event) => setRejectReceiptReason(event.target.value)} aria-label="Receipt rejection reason" className={inputClass} /><button type="button" disabled={isWorking} onClick={rejectReceipt} className="w-full rounded-md border border-red-300 px-3 py-2 text-xs font-bold text-red-700 dark:border-red-900 dark:text-red-300">Reject Receipt &amp; Request Correction</button></div> : <p className="mt-2 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">Receipt status: {receipt.status}</p>}
-        </div>}
+
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <label className="text-[10px] font-bold text-slate-600 dark:text-slate-300">
+            Denbar Sponsored Relocation Balance
+            <input value={balance} onChange={(e) => setBalance(e.target.value)} className={inputClass} />
+          </label>
+          <label className="text-[10px] font-bold text-slate-600 dark:text-slate-300">
+            Subscription Fee Status
+            <select value={feeStatus} onChange={(e) => setFeeStatus(e.target.value)} className={inputClass}>
+              <option value="€45 Pending">€45 Pending</option>
+              <option value="€45 Paid & Verified">€45 Paid &amp; Verified</option>
+              <option value="€45 Rejected (Action Required)">€45 Rejected (Action Required)</option>
+              <option value="Waived / Fully Sponsored">Waived / Fully Sponsored</option>
+            </select>
+          </label>
+          <label className="text-[10px] font-bold text-slate-600 dark:text-slate-300">
+            Sponsor Registry Code
+            <input value={sponsorCode} onChange={(e) => setSponsorCode(e.target.value)} className={inputClass} />
+          </label>
+          <label className="text-[10px] font-bold text-slate-600 dark:text-slate-300">
+            SIRI Case Order ID
+            <input value={caseOrderId} onChange={(e) => setCaseOrderId(e.target.value)} className={inputClass} />
+          </label>
+          <label className="col-span-2 text-[10px] font-bold text-slate-600 dark:text-slate-300">
+            Sponsoring Employer Name
+            <input value={employerName} onChange={(e) => setEmployerName(e.target.value)} className={inputClass} />
+          </label>
+        </div>
+
+        <button
+          type="button"
+          disabled={isWorking}
+          onClick={saveFinancials}
+          className="mt-3 w-full rounded-lg bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white px-3 py-2 text-xs font-bold transition-colors disabled:opacity-50"
+        >
+          Save Financial &amp; Account Details
+        </button>
+
+        {/* Uploaded Receipt Details & Verification */}
+        {receipt && (
+          <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-blue-600" />
+                <span>Candidate Uploaded Payment Receipt</span>
+              </h3>
+              {receipt.storagePath && (
+                <button
+                  type="button"
+                  onClick={() => void previewReceipt()}
+                  className="text-[11px] font-bold text-blue-600 hover:underline dark:text-blue-400"
+                >
+                  Inspect Receipt File ↗
+                </button>
+              )}
+            </div>
+
+            {transaction ? (
+              <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div>
+                  <dt className="text-slate-400 font-semibold text-[9px] uppercase">Amount Paid</dt>
+                  <dd className="font-bold text-slate-900 dark:text-slate-100">{transaction.amount}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400 font-semibold text-[9px] uppercase">Channel / Method</dt>
+                  <dd className="font-semibold text-slate-900 dark:text-slate-100">{transaction.method}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400 font-semibold text-[9px] uppercase">Transaction Ref ID</dt>
+                  <dd className="font-mono font-bold text-slate-900 dark:text-slate-100 break-all">
+                    {transaction.transactionId}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400 font-semibold text-[9px] uppercase">Payment Date</dt>
+                  <dd className="font-semibold text-slate-900 dark:text-slate-100">{transaction.paymentDate}</dd>
+                </div>
+                <div className="col-span-2">
+                  <dt className="text-slate-400 font-semibold text-[9px] uppercase">Candidate Remarks</dt>
+                  <dd className="text-slate-700 dark:text-slate-300 italic">{transaction.remarks || 'None provided'}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="text-[11px] text-slate-500">Receipt file uploaded without structured transaction metadata.</p>
+            )}
+
+            {receipt.status === 'pending' || receipt.status === 'rejected' ? (
+              <div className="space-y-2 pt-1">
+                <button
+                  type="button"
+                  disabled={isWorking}
+                  onClick={approveReceipt}
+                  className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 text-xs font-bold shadow-sm transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Approve Receipt · €45 Paid &amp; Verified</span>
+                </button>
+
+                {/* Quick Rejection Preset Chips */}
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                    Quick Rejection Chips:
+                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    {RECEIPT_REJECTION_CHIPS.map((chip) => (
+                      <button
+                        key={chip}
+                        type="button"
+                        onClick={() => setRejectReceiptReason(chip)}
+                        className={`px-2 py-0.5 text-[10px] font-semibold rounded border transition-colors ${
+                          rejectReceiptReason === chip
+                            ? 'bg-red-600 text-white border-red-600'
+                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-red-300'
+                        }`}
+                      >
+                        {chip}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <input
+                  value={rejectReceiptReason}
+                  onChange={(e) => setRejectReceiptReason(e.target.value)}
+                  placeholder="Enter rejection feedback for candidate..."
+                  className={inputClass}
+                />
+
+                <button
+                  type="button"
+                  disabled={isWorking}
+                  onClick={rejectReceipt}
+                  className="w-full rounded-lg border border-red-300 hover:bg-red-50 dark:hover:bg-red-950/40 text-red-700 dark:text-red-300 px-3 py-1.5 text-xs font-bold transition-colors"
+                >
+                  Reject Receipt &amp; Request Correction
+                </button>
+              </div>
+            ) : (
+              <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>Receipt Status: {receipt.status.toUpperCase()}</span>
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="flex items-center gap-2 border-b border-slate-100 pb-2 text-xs font-bold uppercase text-slate-900 dark:border-slate-800 dark:text-slate-100"><Video className="h-4 w-4" />Video Interview Coordination</h2>
-        <div className="mt-3 space-y-2">
-          <label className="block text-[10px] font-semibold">Meeting URL<input type="url" value={meetingUrl} onChange={(event) => setMeetingUrl(event.target.value)} placeholder="https://zoom.us/..." className={inputClass} /></label>
-          <div className="grid grid-cols-2 gap-2"><label className="text-[10px] font-semibold">Meeting ID<input value={meetingId} onChange={(event) => setMeetingId(event.target.value)} className={inputClass} /></label><label className="text-[10px] font-semibold">Passcode<input value={passcode} onChange={(event) => setPasscode(event.target.value)} className={inputClass} /></label></div>
-          <label className="block text-[10px] font-semibold">Scheduled date &amp; time<input type="datetime-local" value={interviewAt} onChange={(event) => setInterviewAt(event.target.value)} className={inputClass} /></label>
-          <label className="block text-[10px] font-semibold">Coordinator name<input value={interviewCoordinator} onChange={(event) => setInterviewCoordinator(event.target.value)} className={inputClass} /></label>
-          <label className="block text-[10px] font-semibold">Preparation notes<textarea rows={2} value={preparationNotes} onChange={(event) => setPreparationNotes(event.target.value)} className={inputClass} /></label>
-          <button type="button" disabled={isWorking} onClick={saveInterview} className="w-full rounded-md bg-blue-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Save &amp; Send Video Interview Invite</button>
+      {/* Built-In Official Contract & SIRI Document Generator Button Card */}
+      <section className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/50 dark:bg-emerald-950/20 p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase text-emerald-950 dark:text-emerald-200">
+            <Sparkles className="w-4 h-4 text-emerald-600" />
+            <span>Official SIRI Contract &amp; Document Generator</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsGeneratorOpen(true)}
+            className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-xs font-bold shadow-sm transition-colors flex items-center gap-1"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Generate Document</span>
+          </button>
+        </div>
+        <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-400">
+          Auto-fills candidate legal data into 4 binding SIRI templates (Job Contract, Sponsorship Cert, Biometrics Authorization, Denbar Stamp).
+        </p>
+      </section>
+
+      {/* Stage 4 Live Zoom Facial Verification Scheduler */}
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h2 className="flex items-center gap-2 border-b border-slate-100 pb-2 text-xs font-bold uppercase tracking-wider text-slate-900 dark:border-slate-800 dark:text-slate-100">
+          <Video className="w-4 h-4 text-blue-600" />
+          <span>Stage 4 Live Zoom Facial Scheduler</span>
+        </h2>
+        <div className="mt-3 space-y-2 text-xs">
+          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300">
+            Zoom Meeting Link URL *
+            <input
+              type="url"
+              value={meetingUrl}
+              onChange={(e) => setMeetingUrl(e.target.value)}
+              placeholder="https://us05web.zoom.us/j/..."
+              className={inputClass}
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-[10px] font-bold text-slate-600 dark:text-slate-300">
+              Meeting ID
+              <input value={meetingId} onChange={(e) => setMeetingId(e.target.value)} className={inputClass} />
+            </label>
+            <label className="text-[10px] font-bold text-slate-600 dark:text-slate-300">
+              Passcode
+              <input value={passcode} onChange={(e) => setPasscode(e.target.value)} className={inputClass} />
+            </label>
+          </div>
+          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300">
+            Scheduled Date &amp; Time *
+            <input
+              type="datetime-local"
+              value={interviewAt}
+              onChange={(e) => setInterviewAt(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300">
+            Assigned Caseworker / Officer
+            <input
+              value={interviewCoordinator}
+              onChange={(e) => setInterviewCoordinator(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300">
+            Preparation Notes for Candidate
+            <textarea
+              rows={2}
+              value={preparationNotes}
+              onChange={(e) => setPreparationNotes(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={isWorking}
+            onClick={saveInterview}
+            className="w-full rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 text-xs font-bold transition-colors shadow-sm disabled:opacity-50"
+          >
+            Save &amp; Dispatch Zoom Facial Schedule
+          </button>
         </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="flex items-center gap-2 border-b border-slate-100 pb-2 text-xs font-bold uppercase text-slate-900 dark:border-slate-800 dark:text-slate-100"><CalendarDays className="h-4 w-4" />Application Center Appointment</h2>
-        <div className="mt-3 space-y-2"><label className="block text-[10px] font-semibold">Center location<input value={centerLocation} onChange={(event) => setCenterLocation(event.target.value)} className={inputClass} /></label><label className="block text-[10px] font-semibold">Appointment date &amp; time<input type="datetime-local" value={appointmentAt} onChange={(event) => setAppointmentAt(event.target.value)} className={inputClass} /></label><label className="block text-[10px] font-semibold">Reference code<input value={appointmentRef} onChange={(event) => setAppointmentRef(event.target.value)} className={inputClass} /></label><label className="block text-[10px] font-semibold">Document checklist notes<textarea rows={2} value={appointmentNotes} onChange={(event) => setAppointmentNotes(event.target.value)} className={inputClass} /></label><button type="button" disabled={isWorking} onClick={saveAppointment} className="w-full rounded-md bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Save &amp; Send Appointment Schedule</button></div>
+      {/* Stage 5 Embassy / VFS Biometrics Scheduler */}
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h2 className="flex items-center gap-2 border-b border-slate-100 pb-2 text-xs font-bold uppercase tracking-wider text-slate-900 dark:border-slate-800 dark:text-slate-100">
+          <CalendarDays className="w-4 h-4 text-emerald-600" />
+          <span>Stage 5 Embassy / VFS Biometrics Scheduler</span>
+        </h2>
+        <div className="mt-3 space-y-2 text-xs">
+          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300">
+            Venue / Application Center Location *
+            <input
+              value={centerLocation}
+              onChange={(e) => setCenterLocation(e.target.value)}
+              placeholder="e.g. VFS Global Kathmandu, Chhaya Center 3rd Floor"
+              className={inputClass}
+            />
+          </label>
+          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300">
+            Biometrics Appointment Date &amp; Time *
+            <input
+              type="datetime-local"
+              value={appointmentAt}
+              onChange={(e) => setAppointmentAt(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300">
+            Appointment Reference Code *
+            <input
+              value={appointmentRef}
+              onChange={(e) => setAppointmentRef(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300">
+            Mandatory Physical Checklist Notes
+            <textarea
+              rows={2}
+              value={appointmentNotes}
+              onChange={(e) => setAppointmentNotes(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={isWorking}
+            onClick={saveAppointment}
+            className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 text-xs font-bold transition-colors shadow-sm disabled:opacity-50"
+          >
+            Save &amp; Dispatch Biometrics Appointment
+          </button>
+        </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="flex items-center gap-2 border-b border-slate-100 pb-2 text-xs font-bold uppercase text-slate-900 dark:border-slate-800 dark:text-slate-100"><Send className="h-4 w-4" />Portal Notice &amp; WhatsApp</h2>
-        <div className="mt-3 space-y-2"><label className="block text-[10px] font-semibold">Message template<select value={preset} onChange={(event) => handlePreset(event.target.value as keyof typeof notificationPresets)} className={inputClass}>{Object.keys(notificationPresets).map((key) => <option key={key}>{key}</option>)}</select></label><label className="block text-[10px] font-semibold">Notification title<input value={noticeTitle} onChange={(event) => setNoticeTitle(event.target.value)} className={inputClass} /></label><label className="block text-[10px] font-semibold">Message<textarea rows={3} value={noticeMessage} onChange={(event) => setNoticeMessage(event.target.value)} className={inputClass} /></label><button type="button" disabled={isWorking} onClick={() => void sendNotice()} className="w-full rounded-md bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><MessageCircle className="mr-1 inline h-3.5 w-3.5" />Send to Portal &amp; Open WhatsApp</button></div>
+      {/* Custom Portal Notification & WhatsApp Dispatcher */}
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h2 className="flex items-center gap-2 border-b border-slate-100 pb-2 text-xs font-bold uppercase tracking-wider text-slate-900 dark:border-slate-800 dark:text-slate-100">
+          <Send className="w-4 h-4 text-emerald-600" />
+          <span>Official Notification &amp; WhatsApp Dispatch</span>
+        </h2>
+        <div className="mt-3 space-y-2 text-xs">
+          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300">
+            Official Notification Preset Template
+            <select
+              value={preset}
+              onChange={(e) => handlePreset(e.target.value as keyof typeof notificationPresets)}
+              className={inputClass}
+            >
+              {Object.keys(notificationPresets).map((key) => (
+                <option key={key} value={key}>
+                  {key}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300">
+            Notification Title *
+            <input value={noticeTitle} onChange={(e) => setNoticeTitle(e.target.value)} className={inputClass} />
+          </label>
+          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300">
+            Message Body *
+            <textarea
+              rows={3}
+              value={noticeMessage}
+              onChange={(e) => setNoticeMessage(e.target.value)}
+              className={inputClass}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={isWorking}
+            onClick={() => void sendNotice()}
+            className="w-full rounded-lg bg-[#25D366] hover:bg-[#20ba5a] text-white px-3 py-2 text-xs font-bold shadow-sm transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+          >
+            <MessageCircle className="w-4 h-4" />
+            <span>Send to Portal &amp; Open WhatsApp</span>
+          </button>
+        </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="border-b border-slate-100 pb-2 text-xs font-bold uppercase dark:border-slate-800">Private CRM Notes &amp; Priority</h2>
-        <div className="mt-3 space-y-2"><label className="block text-[10px] font-semibold">Priority<select value={priority} onChange={(event) => setPriority(event.target.value as CandidateProcessMetadata['priority'])} className={inputClass}>{['Normal', 'High Priority', 'Ready', 'On Hold'].map((value) => <option key={value}>{value}</option>)}</select></label><label className="block text-[10px] font-semibold">Internal coordinator notes<textarea rows={3} value={coordinatorNotes} onChange={(event) => setCoordinatorNotes(event.target.value)} className={inputClass} /></label><button type="button" disabled={isWorking} onClick={saveCrm} className="w-full rounded-md border border-slate-300 px-3 py-2 text-xs font-bold dark:border-slate-700">Save internal notes</button><button type="button" onClick={() => void copyWelcomeSummary()} className="w-full rounded-md border border-slate-300 px-3 py-2 text-xs font-bold dark:border-slate-700">Copy Welcome &amp; Login Summary</button></div>
+      {/* Caseworker CRM Tools: Internal Notes & Priority Tags */}
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h2 className="border-b border-slate-100 pb-2 text-xs font-bold uppercase tracking-wider text-slate-900 dark:border-slate-800 dark:text-slate-100">
+          Caseworker CRM Notes &amp; Priority
+        </h2>
+        <div className="mt-3 space-y-2 text-xs">
+          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300">
+            Dossier Priority Status
+            <select value={priority} onChange={(e) => setPriority(e.target.value)} className={inputClass}>
+              <option value="Normal">Normal</option>
+              <option value="High Priority">High Priority 🔥</option>
+              <option value="Ready">Ready for Visa Stamp ✅</option>
+              <option value="On Hold">On Hold ⚠️</option>
+            </select>
+          </label>
+          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300">
+            Private Caseworker Internal Notes (Hidden from Candidate)
+            <textarea
+              rows={3}
+              value={coordinatorNotes}
+              onChange={(e) => setCoordinatorNotes(e.target.value)}
+              placeholder="e.g. Verified with employer via phone; awaiting police clearance..."
+              className={inputClass}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={isWorking}
+            onClick={saveCrm}
+            className="w-full rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 px-3 py-2 text-xs font-bold transition-colors"
+          >
+            Save Internal Notes &amp; Priority
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsGeneratorOpen(true)}
+            className="w-full rounded-lg bg-sky-600 hover:bg-sky-700 text-white px-3 py-2 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+          >
+            <PenTool className="w-3.5 h-3.5" />
+            <span>Generate Official Contract / Letter</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => void copyWelcomeSummary()}
+            className="w-full rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 px-3 py-2 text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+          >
+            <Copy className="w-3.5 h-3.5" />
+            <span>Copy Welcome &amp; Login Card (WhatsApp)</span>
+          </button>
+        </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-center justify-between gap-2"><h2 className="flex items-center gap-2 text-xs font-bold uppercase"><FileText className="h-4 w-4" />Agency Document Generator</h2><button type="button" onClick={() => setIsGeneratorOpen(true)} className="rounded-md bg-slate-800 px-3 py-1.5 text-[10px] font-bold text-white dark:bg-slate-200 dark:text-slate-900">Generate document</button></div>
-        <p className="mt-2 text-[10px] text-slate-500">Private employer/recruitment templates, not government forms.</p>
-      </section>
-
-      {isGeneratorOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4"><div className="w-full max-w-md space-y-4 rounded-lg bg-white p-5 dark:bg-slate-900"><div className="flex items-center justify-between"><h2 className="text-sm font-bold">Generate private agency document</h2><button type="button" onClick={() => setIsGeneratorOpen(false)} aria-label="Close">×</button></div><label className="block text-xs font-semibold">Template<select value={agencyTemplate} onChange={(event) => setAgencyTemplate(event.target.value)} className={inputClass}>{['Seasonal Agricultural Employment Agreement', 'Herdsman Placement Agreement', 'Employer Sponsorship Summary', 'Service Fee Payment Confirmation'].map((value) => <option key={value}>{value}</option>)}</select></label><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={requiresSignature} onChange={(event) => setRequiresSignature(event.target.checked)} />Request candidate signature</label><div className="flex justify-end gap-2"><button type="button" onClick={() => setIsGeneratorOpen(false)} className="rounded-md border px-3 py-2 text-xs">Cancel</button><button type="button" disabled={isWorking} onClick={() => void generateAgencyDocument()} className="rounded-md bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Upload to dossier</button></div></div></div>}
+      {/* Official Contract Generator Modal */}
+      <OfficialContractGeneratorModal
+        isOpen={isGeneratorOpen}
+        onClose={() => setIsGeneratorOpen(false)}
+        candidate={candidate}
+        actor={actor}
+      />
     </div>
   );
 };
