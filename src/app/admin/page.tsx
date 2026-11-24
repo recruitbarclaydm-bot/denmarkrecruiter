@@ -50,10 +50,15 @@ import {
   DownloadCloud,
   Maximize2,
   Copy,
+  Printer,
+  ExternalLink,
+  DollarSign,
+  Video,
   X as CloseIcon,
 } from 'lucide-react';
 
 type FunnelKey = 'all' | 'pending' | 'documents' | 'fees' | 'stage4' | 'stage56';
+type AdminTab = 'overview' | 'documents' | 'financial' | 'interviews' | 'audit';
 
 export default function AdminPage() {
   const router = useRouter();
@@ -83,6 +88,7 @@ export default function AdminPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilterTab, setActiveFilterTab] = useState<'all' | 'pending' | 'action_required' | 'approved'>('all');
   const [activeFunnel, setActiveFunnel] = useState<FunnelKey>('all');
+  const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [isActivityOpen, setIsActivityOpen] = useState(false);
   const [selectedDocId, setSelectedDocId] = useState<string>('');
   const [activeDocForFullPreview, setActiveDocForFullPreview] = useState<DocumentRecord | null>(null);
@@ -427,166 +433,203 @@ Please log in to complete your KYC declaration and review official documents.`;
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex flex-col transition-colors">
       <Header />
 
-      <main className="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 py-6 space-y-5">
-        {/* Admin Top Dashboard Bar */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 rounded-xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400">
-                <ShieldCheck className="w-5 h-5" />
+      <main className="flex-1 max-w-[1700px] w-full mx-auto px-3 sm:px-6 py-4 space-y-4">
+        {/* Sleek Horizontal Command Toolbar (Linear / Stripe style) */}
+        <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md rounded-2xl p-3 sm:px-4 border border-slate-200 dark:border-white/[0.08] shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3 sticky top-16 z-20 transition-all">
+          {/* Left: Title & Inline Clickable Funnel Filters */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <div className="flex items-center gap-2 pr-2 border-r border-slate-200 dark:border-white/10 shrink-0">
+              <span className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                <ShieldCheck className="w-4 h-4" />
               </span>
-              <h1 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
-                Private Recruitment Coordination Console &middot; Employer &amp; Candidate Services
-              </h1>
+              <span className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                Coordinator Workspace
+              </span>
             </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Active Coordinator: <strong>{user.name}</strong> &middot; Private candidate and employer coordination
-            </p>
+
+            {/* Clickable KPI Filter Pills */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {([
+                ['all', 'All', funnelCounts.all],
+                ['pending', 'KYC Review', funnelCounts.pending],
+                ['documents', 'Docs Pending', funnelCounts.documents],
+                ['fees', 'Receipts', funnelCounts.fees],
+                ['stage4', 'Stage 4 Zoom', funnelCounts.stage4],
+                ['stage56', 'Ready (5/6)', funnelCounts.stage56],
+              ] as [FunnelKey, string, number][]).map(([key, label, count]) => {
+                const isActive = activeFunnel === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
+                      setActiveFunnel(key);
+                      setActiveFilterTab('all');
+                    }}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all flex items-center gap-1.5 ${
+                      isActive
+                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40 shadow-sm'
+                        : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/5 hover:border-slate-300 dark:hover:border-white/10'
+                    }`}
+                  >
+                    <span>{label}</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                        isActive
+                          ? 'bg-emerald-600 text-white dark:bg-emerald-500 dark:text-slate-950'
+                          : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* Right: Actions */}
+          <div className="flex items-center gap-2 flex-wrap ml-auto">
             {needsSeed && (
               <button
                 onClick={() => setIsSeedFormOpen((open) => !open)}
-                className="px-3.5 py-2 text-xs font-bold rounded-lg bg-sky-700 hover:bg-sky-800 text-white shadow-sm flex items-center gap-1.5 transition-colors"
+                className="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-sky-700 hover:bg-sky-800 text-white shadow-sm flex items-center gap-1 transition-colors"
+                title="Seed Dipak & Nokha to cloud"
               >
-                <span>☁️ Seed Dipak &amp; Nokha to Supabase Cloud</span>
+                <span>☁️ Seed Profiles</span>
               </button>
             )}
+
             <button
               onClick={handleLiveSync}
               disabled={isSyncing}
-              className="px-3.5 py-2 text-xs font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              className="px-2.5 py-1.5 text-xs font-bold rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm flex items-center gap-1.5 transition-colors disabled:opacity-50"
               title="Force real-time cloud data refresh from Supabase"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-emerald-600' : ''}`} />
-              <span>{isSyncing ? 'Syncing...' : '🔄 Live Sync'}</span>
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-emerald-500' : ''}`} />
+              <span>{isSyncing ? 'Syncing...' : 'Sync'}</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setIsActivityOpen(true)}
+              className="px-2.5 py-1.5 text-xs font-bold rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm flex items-center gap-1.5 transition-colors"
+              title="Global Activity Feed"
+            >
+              <Activity className="w-3.5 h-3.5 text-blue-500" />
+              <span>Activity</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={exportQueueCsv}
+              className="px-2.5 py-1.5 text-xs font-bold rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm flex items-center gap-1.5 transition-colors"
+              title="Export Queue as CSV"
+            >
+              <DownloadCloud className="w-3.5 h-3.5" />
+              <span>CSV</span>
+            </button>
+
             <button
               onClick={() => setIsRegisterModalOpen(true)}
-              className="px-3.5 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1.5 transition-colors"
+              className="px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1.5 transition-colors"
             >
-              <UserPlus className="w-4 h-4" />
-              <span>+ Register New Candidate</span>
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>+ New Candidate</span>
             </button>
-            <div className="text-xs font-semibold px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-              Total Queue: <strong>{candidates.length} Dossiers</strong>
-            </div>
-            {needsSeed && isSeedFormOpen && (
-              <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40">
-                <input
-                  type="password"
-                  value={dipakSeedPassword}
-                  onChange={(event) => setDipakSeedPassword(event.target.value)}
-                  placeholder="Dipak account password"
-                  autoComplete="new-password"
-                  className="px-3 py-2 text-xs rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
-                />
-                <input
-                  type="password"
-                  value={nokhaSeedPassword}
-                  onChange={(event) => setNokhaSeedPassword(event.target.value)}
-                  placeholder="Nokha account password"
-                  autoComplete="new-password"
-                  className="px-3 py-2 text-xs rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
-                />
-                <button
-                  onClick={handleSeedCandidates}
-                  disabled={isSeeding}
-                  className="sm:col-span-2 px-3 py-2 text-xs font-bold rounded-md bg-sky-700 hover:bg-sky-800 text-white disabled:opacity-50"
-                >
-                  {isSeeding ? 'Syncing profiles and documents...' : 'Create / Sync Cloud Profiles'}
-                </button>
-              </div>
-            )}
           </div>
         </div>
 
-        <section className="space-y-3" aria-label="Recruitment operations overview">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-            {([
-              ['all', 'Total Active Dossiers', 'All candidate files'],
-              ['pending', 'Pending Account / KYC Review', 'Accounts and profiles'],
-              ['documents', 'Documents & Contracts to Review', 'Uploaded or signed files'],
-              ['fees', 'Subscription Receipts Pending', 'Review or correction'],
-              ['stage4', 'Stage 4 Zoom Queue', 'Interview coordination'],
-              ['stage56', 'Stage 5/6 Readiness Queue', 'Final workflow stages'],
-            ] as [FunnelKey, string, string][]).map(([key, title, caption]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => { setActiveFunnel(key); setActiveFilterTab('all'); }}
-                className={`min-h-24 rounded-md border p-3 text-left transition-colors ${activeFunnel === key ? 'border-emerald-700 bg-emerald-50 ring-1 ring-emerald-700 dark:bg-emerald-950/30' : 'border-slate-200 bg-white hover:border-slate-400 dark:border-slate-800 dark:bg-slate-900'}`}
-              >
-                <span className="block text-[10px] font-semibold uppercase text-slate-500">{title}</span>
-                <strong className="mt-1 block text-2xl text-slate-900 dark:text-slate-100">{funnelCounts[key]}</strong>
-                <span className="mt-1 block text-[9px] text-slate-500">{caption}</span>
-              </button>
-            ))}
+        {/* If seed form open */}
+        {needsSeed && isSeedFormOpen && (
+          <div className="p-3 rounded-xl border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <input
+              type="password"
+              value={dipakSeedPassword}
+              onChange={(event) => setDipakSeedPassword(event.target.value)}
+              placeholder="Dipak account password"
+              autoComplete="new-password"
+              className="px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+            />
+            <input
+              type="password"
+              value={nokhaSeedPassword}
+              onChange={(event) => setNokhaSeedPassword(event.target.value)}
+              placeholder="Nokha account password"
+              autoComplete="new-password"
+              className="px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+            />
+            <button
+              onClick={handleSeedCandidates}
+              disabled={isSeeding}
+              className="sm:col-span-2 px-3 py-2 text-xs font-bold rounded-lg bg-sky-700 hover:bg-sky-800 text-white disabled:opacity-50"
+            >
+              {isSeeding ? 'Syncing profiles and documents...' : 'Create / Sync Cloud Profiles'}
+            </button>
           </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            <button type="button" onClick={exportQueueCsv} className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold dark:border-slate-700 dark:bg-slate-900"><DownloadCloud className="h-3.5 w-3.5" />Export Queue (CSV)</button>
-            <button type="button" onClick={() => setIsActivityOpen(true)} className="inline-flex items-center gap-1.5 rounded-md bg-slate-800 px-3 py-2 text-xs font-bold text-white dark:bg-slate-200 dark:text-slate-900"><Activity className="h-3.5 w-3.5" />Global Activity Feed</button>
-          </div>
-        </section>
+        )}
 
-        {/* 3-Pane Workspace Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* 2-Pane SaaS Workspace (Left Queue 320px | Right Main Workspace flex-1) */}
+        <div className="flex flex-col lg:flex-row gap-5 items-start">
           {/* ======================================================== */}
-          {/* LEFT PANE: Candidate Queue & Onboarding (3.5 cols)        */}
+          {/* PANE 1: Candidate Queue & Navigation (320px fixed)        */}
           {/* ======================================================== */}
-          <div className="lg:col-span-4 xl:col-span-3 space-y-3">
-            <div className="bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 space-y-3">
+          <div className="w-full lg:w-80 shrink-0 space-y-3">
+            <div className="bg-white dark:bg-slate-900/90 rounded-2xl p-3.5 shadow-sm border border-slate-200 dark:border-white/[0.08] space-y-3">
               {/* Search */}
               <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search name, passport, sponsor..."
-                  className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                  className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder-slate-400"
                 />
               </div>
 
-              {/* Filter Tabs */}
+              {/* Status Filter Tabs (4 tabs) */}
               <div className="grid grid-cols-2 gap-1 text-[11px] font-bold">
                 <button
+                  type="button"
                   onClick={() => { setActiveFilterTab('all'); setActiveFunnel('all'); }}
-                  className={`py-1.5 px-2 rounded-md transition-colors ${
+                  className={`py-1.5 px-2 rounded-lg text-center transition-colors ${
                     activeFilterTab === 'all'
-                      ? 'bg-brand-primary text-white shadow-sm'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-950 shadow-sm'
+                      : 'bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
                   }`}
                 >
                   All ({candidates.length})
                 </button>
                 <button
+                  type="button"
                   onClick={() => { setActiveFilterTab('pending'); setActiveFunnel('all'); }}
-                  className={`py-1.5 px-2 rounded-md transition-colors ${
+                  className={`py-1.5 px-2 rounded-lg text-center transition-colors ${
                     activeFilterTab === 'pending'
                       ? 'bg-amber-600 text-white shadow-sm'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                      : 'bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
                   }`}
                 >
-                  Pending Appr ({candidates.filter((c) => c.accountStatus === 'pending_approval').length})
+                  Pending ({candidates.filter((c) => c.accountStatus === 'pending_approval').length})
                 </button>
                 <button
+                  type="button"
                   onClick={() => { setActiveFilterTab('action_required'); setActiveFunnel('all'); }}
-                  className={`py-1.5 px-2 rounded-md transition-colors ${
+                  className={`py-1.5 px-2 rounded-lg text-center transition-colors ${
                     activeFilterTab === 'action_required'
                       ? 'bg-blue-600 text-white shadow-sm'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                      : 'bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
                   }`}
                 >
                   Action Req
                 </button>
                 <button
+                  type="button"
                   onClick={() => { setActiveFilterTab('approved'); setActiveFunnel('all'); }}
-                  className={`py-1.5 px-2 rounded-md transition-colors ${
+                  className={`py-1.5 px-2 rounded-lg text-center transition-colors ${
                     activeFilterTab === 'approved'
                       ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                      : 'bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
                   }`}
                 >
                   Approved ({candidates.filter((c) => c.accountStatus === 'approved').length})
@@ -594,37 +637,45 @@ Please log in to complete your KYC declaration and review official documents.`;
               </div>
             </div>
 
-            {/* Candidate Queue Cards */}
-            <div className="space-y-2 max-h-[750px] overflow-y-auto pr-1">
+            {/* Candidate Queue Cards List */}
+            <div className="space-y-2 max-h-[calc(100vh-210px)] overflow-y-auto pr-1 custom-scrollbar">
               {filteredCandidates.map((c) => {
                 const isSelected = c.id === activeCandidate.id;
                 const hasPendingSignedDoc = c.documents.some((d) => d.status === 'signed_pending_review');
+                const pri = adminCrmMetadata[c.id]?.priority;
 
                 return (
                   <div
                     key={c.id}
                     onClick={() => selectCandidate(c.id)}
-                    className={`p-3 rounded-xl border transition-all cursor-pointer ${
+                    className={`p-3 rounded-2xl border transition-all cursor-pointer ${
                       isSelected
-                        ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-brand-primary ring-1 ring-brand-primary shadow-sm'
-                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300'
+                        ? 'bg-emerald-500/10 dark:bg-emerald-950/40 border-emerald-500/50 ring-1 ring-emerald-500/40 shadow-sm'
+                        : 'bg-white dark:bg-slate-900/70 border-slate-200 dark:border-white/[0.06] hover:border-slate-300 dark:hover:border-white/20'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-800">
-                          {c.avatarUrl ? <img src={c.avatarUrl} alt={`${c.name} biometric avatar`} className="h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center text-[10px] font-bold text-slate-500">{c.name.split(' ').map((part) => part[0]).join('')}</span>}
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <div className="h-9 w-9 shrink-0 overflow-hidden rounded-xl border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-slate-800">
+                          {c.avatarUrl ? (
+                            <img src={c.avatarUrl} alt={`${c.name} avatar`} className="h-full w-full object-cover" />
+                          ) : (
+                            <span className="flex h-full items-center justify-center text-[10px] font-bold text-slate-500">
+                              {c.name.split(' ').map((part) => part[0]).join('')}
+                            </span>
+                          )}
                         </div>
                         <div className="min-w-0">
-                          <div className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 truncate">
+                          <div className="font-bold text-xs text-slate-900 dark:text-slate-100 truncate">
                             {c.name}
                           </div>
-                          <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                          <div className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">
                             {c.passportNumber} &middot; {c.employer?.sponsorCode || c.siriCaseOrder?.caseOrderId}
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
+
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -632,64 +683,47 @@ Please log in to complete your KYC declaration and review official documents.`;
                             void copyCandidateCard(c);
                           }}
                           className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                          title="Copy Welcome & Login Card (WhatsApp)"
+                          title="Copy WhatsApp card"
                         >
                           <Copy className="w-3.5 h-3.5" />
                         </button>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex-shrink-0">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                           Stg {c.currentStage}
                         </span>
                       </div>
                     </div>
 
-                    {/* Status badges */}
-                    <div className="flex items-center gap-1.5 flex-wrap mt-2">
-                      {/* Priority tag badge */}
-                      {(() => {
-                        const pri = adminCrmMetadata[c.id]?.priority;
-                        if (pri === 'High Priority') {
-                          return (
-                            <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
-                              🔥 High Priority
-                            </span>
-                          );
-                        }
-                        if (pri === 'Ready') {
-                          return (
-                            <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                              ✅ Ready for Visa
-                            </span>
-                          );
-                        }
-                        if (pri === 'On Hold') {
-                          return (
-                            <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                              ⚠️ On Hold
-                            </span>
-                          );
-                        }
-                        return null;
-                      })()}
-                      {/* Account status badge */}
+                    {/* Status & Priority Pills */}
+                    <div className="flex items-center gap-1.5 flex-wrap mt-2.5">
+                      {pri === 'High Priority' && (
+                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300">
+                          🔥 High Priority
+                        </span>
+                      )}
+                      {pri === 'Ready' && (
+                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                          ✅ Ready
+                        </span>
+                      )}
+                      {pri === 'On Hold' && (
+                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                          ⚠️ Hold
+                        </span>
+                      )}
+
                       {c.accountStatus === 'pending_approval' && (
-                        <span className="text-[9px] font-extrabold px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
                           Pending Approval
                         </span>
                       )}
-                      {c.accountStatus === 'rejected' && (
-                        <span className="text-[9px] font-extrabold px-2 py-0.5 rounded bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300">
-                          Rejected
-                        </span>
-                      )}
                       {c.accountStatus === 'approved' && (
-                        <span className="text-[9px] font-extrabold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                           Approved
                         </span>
                       )}
 
-                      {/* KYC status badge */}
                       <span
-                        className={`text-[9px] font-extrabold px-2 py-0.5 rounded ${
+                        className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${
                           c.kycStatus === 'verified'
                             ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
                             : c.kycStatus === 'submitted'
@@ -702,9 +736,8 @@ Please log in to complete your KYC declaration and review official documents.`;
                         KYC: {c.kycStatus.toUpperCase()}
                       </span>
 
-                      {/* Signed doc indicator */}
                       {hasPendingSignedDoc && (
-                        <span className="text-[9px] font-extrabold px-2 py-0.5 rounded bg-pink-100 text-pink-800 dark:bg-pink-950 dark:text-pink-300 animate-pulse">
+                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-pink-100 text-pink-800 dark:bg-pink-950 dark:text-pink-300 animate-pulse">
                           Signed Doc Waiting
                         </span>
                       )}
@@ -722,508 +755,804 @@ Please log in to complete your KYC declaration and review official documents.`;
           </div>
 
           {/* ======================================================== */}
-          {/* CENTER PANE: Split-Screen Document & KYC Inspector       */}
-          {/* (5.5 cols)                                              */}
+          {/* PANE 2: Active Candidate Workspace (flex-1)               */}
           {/* ======================================================== */}
-          <div className="lg:col-span-8 xl:col-span-6 space-y-4">
-            {/* Account Approval Action Banner (if pending or rejected) */}
-            {activeCandidate.accountStatus !== 'approved' && (
-              <div className="p-4 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="w-5 h-5 text-amber-600" />
-                    <div>
-                      <h3 className="text-xs font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wider">
-                        Applicant Awaiting Account Verification &amp; Portal Unlock
-                      </h3>
-                      <p className="text-[11px] text-amber-800 dark:text-amber-300">
-                        {activeCandidate.name} has submitted self-registration. Assign sponsor code &amp; case order to approve.
-                      </p>
+          <div className="flex-1 min-w-0 space-y-4">
+            {/* 1. Candidate Profile Header Card */}
+            <div className="bg-white dark:bg-slate-900/90 rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200 dark:border-white/[0.08] space-y-4">
+              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+                {/* Avatar & Candidate Identity */}
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl border-2 border-emerald-500/30 bg-slate-100 dark:bg-slate-800 shadow-sm">
+                    {activeCandidate.avatarUrl ? (
+                      <img
+                        src={activeCandidate.avatarUrl}
+                        alt={`${activeCandidate.name} avatar`}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-full items-center justify-center text-sm font-bold text-slate-500">
+                        {activeCandidate.name.split(' ').map((p) => p[0]).join('')}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate">
+                        {activeCandidate.name}
+                      </h2>
+                      <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/5">
+                        {activeCandidate.passportNumber}
+                      </span>
+                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
+                        {activeCandidate.jobTitle}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
+                      <span>Employer: <strong className="text-slate-700 dark:text-slate-200">{activeCandidate.employer?.name || 'AgroNord A/S'}</strong></span>
+                      <span>&middot;</span>
+                      <span>Sponsor: <code className="font-mono text-slate-700 dark:text-slate-200">{activeCandidate.employer?.sponsorCode || '#944135'}</code></span>
+                      <span>&middot;</span>
+                      <span>Case ID: <code className="font-mono text-slate-700 dark:text-slate-200">{activeCandidate.siriCaseOrder?.caseOrderId}</code></span>
+                      <span>&middot;</span>
+                      <span>{activeCandidate.email}</span>
+                      <span>&middot;</span>
+                      <span className="font-mono">{activeCandidate.phone}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase">
-                      Sponsor Code
-                    </label>
-                    <input
-                      type="text"
-                      value={sponsorCodeInput}
-                      onChange={(e) => setSponsorCodeInput(e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-xs rounded border border-slate-300 dark:border-slate-700 font-mono bg-white dark:bg-slate-800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase">
-                      SIRI Case Order ID
-                    </label>
-                    <input
-                      type="text"
-                      value={caseOrderIdInput}
-                      onChange={(e) => setCaseOrderIdInput(e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-xs rounded border border-slate-300 dark:border-slate-700 font-mono bg-white dark:bg-slate-800"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-2 pt-1">
+                {/* Quick Action Buttons */}
+                <div className="flex items-center gap-1.5 flex-wrap shrink-0">
                   <button
-                    onClick={() => setIsRejectAccountModalOpen(true)}
-                    className="px-3 py-1.5 text-xs font-bold rounded-lg border border-red-300 bg-white dark:bg-slate-800 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50"
+                    type="button"
+                    onClick={() => setIsContractGeneratorOpen(true)}
+                    className="px-3 py-1.5 text-xs font-bold rounded-xl bg-sky-600 hover:bg-sky-700 text-white shadow-sm flex items-center gap-1.5 transition-colors"
                   >
-                    Reject Registration
+                    <PenTool className="w-3.5 h-3.5" />
+                    <span>+ Generate Doc</span>
                   </button>
+
                   <button
-                    onClick={handleApproveAccount}
-                    className="px-4 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1.5"
+                    type="button"
+                    onClick={() => setIsDispatchModalOpen(true)}
+                    className="px-3 py-1.5 text-xs font-bold rounded-xl bg-brand-primary hover:bg-brand-secondary text-white shadow-sm flex items-center gap-1.5 transition-colors"
                   >
-                    <Unlock className="w-3.5 h-3.5" />
-                    <span>Approve Account &amp; Unlock Portal</span>
+                    <Send className="w-3.5 h-3.5" />
+                    <span>+ Dispatch Doc</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="p-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                    title="Print Candidate Dossier"
+                  >
+                    <Printer className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSendWhatsAppAlert}
+                    className="p-2 text-xs font-semibold rounded-xl bg-[#25D366] hover:bg-[#20ba5a] text-white shadow-sm transition-colors"
+                    title="Send WhatsApp Alert"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void copyCandidateCard(activeCandidate)}
+                    className="p-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                    title="Copy Welcome Card"
+                  >
+                    <Copy className="w-4 h-4" />
                   </button>
                 </div>
               </div>
-            )}
 
-            {/* Dossier Header */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                    {activeCandidate.name}
-                  </h2>
-                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                    {activeCandidate.passportNumber}
+              {/* Interactive Stage Controller Bar */}
+              <div className="pt-3 border-t border-slate-100 dark:border-white/[0.08] flex flex-col md:flex-row items-start md:items-center justify-between gap-3 bg-slate-50/70 dark:bg-slate-950/40 p-3 rounded-xl border border-slate-200/60 dark:border-white/5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Workflow Stage:
                   </span>
-                </div>
-                <div className="text-xs text-slate-500 mt-0.5">
-                  Scheme: <strong>{activeCandidate.jobTitle}</strong> &middot; Employer: {activeCandidate.employer?.name}
-                </div>
-              </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleStageRollback}
+                      disabled={activeCandidate.currentStage <= 1}
+                      className="px-2 py-1 text-xs font-bold rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 disabled:opacity-40 flex items-center gap-1 transition-colors"
+                    >
+                      <ArrowLeft className="w-3 h-3" />
+                      <span>Rollback</span>
+                    </button>
 
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={() => setIsContractGeneratorOpen(true)}
-                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-sky-600 hover:bg-sky-700 text-white shadow-sm flex items-center gap-1.5 transition-colors"
-                >
-                  <PenTool className="w-3.5 h-3.5" />
-                  <span>+ Generate Official Document</span>
-                </button>
-                <button
-                  onClick={() => setIsDispatchModalOpen(true)}
-                  className="px-3 py-1.5 text-xs font-bold rounded-lg bg-brand-primary hover:bg-brand-secondary text-white shadow-sm flex items-center gap-1.5 transition-colors"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>+ Dispatch Document</span>
-                </button>
+                    <div className="px-3 py-1 text-xs font-bold rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-2">
+                      <span>Stage {activeCandidate.currentStage} of 6:</span>
+                      <strong className="text-slate-900 dark:text-slate-100">
+                        {activeCandidate.stages[activeCandidate.currentStage - 1]?.title || 'Processing'}
+                      </strong>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleStageAdvance}
+                      disabled={activeCandidate.currentStage >= 6}
+                      className="px-2 py-1 text-xs font-bold rounded-lg bg-brand-primary hover:bg-brand-secondary text-white disabled:opacity-40 shadow-sm flex items-center gap-1 transition-colors"
+                    >
+                      <span>Advance</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 ml-auto">
+                  <span className="text-[10px] text-slate-400 font-medium hidden sm:inline">Override:</span>
+                  <select
+                    value={activeCandidate.currentStage}
+                    onChange={(e) => handleSetStage(parseInt(e.target.value, 10) as StageNumber)}
+                    className="text-xs font-semibold py-1 px-2.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none"
+                  >
+                    {activeCandidate.stages.map((st) => (
+                      <option key={st.number} value={st.number}>
+                        Stage {st.number}: {st.title} {st.number >= 5 ? '(Gated)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
-            {/* Split Screen KYC vs. Document Inspector */}
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-              {/* KYC Profile Column (5 cols) */}
-              <div className="md:col-span-5 max-h-[760px] overflow-y-auto bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
-                  <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider flex items-center gap-1.5">
-                    <UserCheck className="w-4 h-4 text-brand-primary" />
-                    <span>Submitted KYC Record</span>
-                  </h3>
-                  <span
-                    className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase ${
-                      activeCandidate.kycStatus === 'verified'
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                        : activeCandidate.kycStatus === 'submitted'
-                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-                        : activeCandidate.kycStatus === 'rejected'
-                        ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
-                        : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+            {/* 2. Horizontal SaaS Tabs Navigation */}
+            <div className="flex items-center gap-2 border-b border-slate-200 dark:border-white/[0.08] overflow-x-auto pb-1">
+              {([
+                ['overview', 'Overview & KYC', activeCandidate.kycStatus === 'submitted' || activeCandidate.accountStatus === 'pending_approval'],
+                ['documents', 'Documents & Vault', activeCandidate.documents.filter((d) => d.status === 'pending' || d.status === 'signed_pending_review').length],
+                ['financial', 'Payments & Financial', /pending|submitted|review/i.test(activeCandidate.actionRequired?.subscription || activeCandidate.denbarAccount?.status || '')],
+                ['interviews', 'Interviews & Notices', false],
+                ['audit', 'Audit Log & Account', false],
+              ] as [AdminTab, string, boolean | number][]).map(([tabKey, tabTitle, badge]) => {
+                const isCurrent = activeTab === tabKey;
+                return (
+                  <button
+                    key={tabKey}
+                    type="button"
+                    onClick={() => setActiveTab(tabKey)}
+                    className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 whitespace-nowrap border ${
+                      isCurrent
+                        ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-950 border-transparent shadow-sm'
+                        : 'bg-white/80 dark:bg-slate-900/60 text-slate-600 dark:text-slate-400 border-slate-200/80 dark:border-white/[0.06] hover:bg-slate-100 dark:hover:bg-slate-800'
                     }`}
                   >
-                    {activeCandidate.kycStatus}
-                  </span>
-                </div>
+                    <span>{tabTitle}</span>
+                    {typeof badge === 'number' && badge > 0 && (
+                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        isCurrent
+                          ? 'bg-emerald-500 text-white dark:text-slate-950'
+                          : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                      }`}>
+                        {badge}
+                      </span>
+                    )}
+                    {typeof badge === 'boolean' && badge && (
+                      <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
 
-                <div className="space-y-2 text-xs">
-                  <div className="flex items-center gap-3 rounded-md bg-slate-50 p-2 dark:bg-slate-800/60">
-                    <div className="h-20 w-16 shrink-0 overflow-hidden rounded border border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
-                      {activeCandidate.avatarUrl
-                        ? <img src={activeCandidate.avatarUrl} alt={`${activeCandidate.name} biometric avatar`} className="h-full w-full object-cover" />
-                        : <div className="flex h-full items-center justify-center text-[10px] text-slate-500">No photo</div>}
+            {/* 3. Tab Contents */}
+            {/* TAB 1: OVERVIEW & KYC */}
+            {activeTab === 'overview' && (
+              <div className="space-y-4 animate-fade-in">
+                {/* Account Approval Action Banner (if pending) */}
+                {activeCandidate.accountStatus !== 'approved' && (
+                  <div className="p-4 rounded-2xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                        <div>
+                          <h3 className="text-xs font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wider">
+                            Applicant Awaiting Account Verification &amp; Portal Unlock
+                          </h3>
+                          <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                            {activeCandidate.name} has submitted self-registration. Assign sponsor code &amp; case order to approve.
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 uppercase block font-semibold">Biometric Profile Photo</span>
-                      <span className="text-[11px] text-slate-700 dark:text-slate-300">{activeCandidate.avatarStoragePath ? 'Private dossier image' : 'Not uploaded'}</span>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase">
+                          Sponsor Code
+                        </label>
+                        <input
+                          type="text"
+                          value={sponsorCodeInput}
+                          onChange={(e) => setSponsorCodeInput(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-700 font-mono bg-white dark:bg-slate-800"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase">
+                          SIRI Case Order ID
+                        </label>
+                        <input
+                          type="text"
+                          value={caseOrderIdInput}
+                          onChange={(e) => setCaseOrderIdInput(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-700 font-mono bg-white dark:bg-slate-800"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsRejectAccountModalOpen(true)}
+                        className="px-3 py-1.5 text-xs font-bold rounded-lg border border-red-300 bg-white dark:bg-slate-800 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50"
+                      >
+                        Reject Registration
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleApproveAccount}
+                        className="px-4 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1.5"
+                      >
+                        <Unlock className="w-3.5 h-3.5" />
+                        <span>Approve Account &amp; Unlock Portal</span>
+                      </button>
                     </div>
                   </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 uppercase block font-semibold">Legal Full Name</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">{activeCandidate.name}</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <span className="text-[10px] text-slate-400 uppercase block font-semibold">Passport Expiry</span>
-                      <span className="font-mono text-slate-800 dark:text-slate-200">{activeCandidate.passportExpiry || '2033-04-18'}</span>
+                )}
+
+                {/* KYC Clearance Status Banner */}
+                <div className="bg-white dark:bg-slate-900/90 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-white/[0.08] space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-white/[0.08] pb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="p-1.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                        <UserCheck className="w-4 h-4" />
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                            Identity &amp; Biometric KYC Verification
+                          </h3>
+                          <span
+                            className={`text-[9px] font-bold px-2 py-0.5 rounded-md uppercase ${
+                              activeCandidate.kycStatus === 'verified'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                : activeCandidate.kycStatus === 'submitted'
+                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                                : activeCandidate.kycStatus === 'rejected'
+                                ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
+                                : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                            }`}
+                          >
+                            {activeCandidate.kycStatus}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Submitted Profile &middot; Active Registration
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 uppercase block font-semibold">Date of Birth</span>
-                      <span className="text-slate-800 dark:text-slate-200">{activeCandidate.dob}</span>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={handleApproveKyc}
+                        className="py-1.5 px-3 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1.5 transition-colors"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Approve KYC</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsRejectKycModalOpen(true)}
+                        className="py-1.5 px-3 text-xs font-bold rounded-lg border border-red-300 bg-white dark:bg-slate-800 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                      >
+                        Flag / Reject
+                      </button>
                     </div>
                   </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 uppercase block font-semibold">Nationality</span>
-                    <span className="text-slate-800 dark:text-slate-200">{activeCandidate.nationality}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 uppercase block font-semibold">Permanent Address</span>
-                    <span className="text-slate-800 dark:text-slate-200">{activeCandidate.permanentAddress || 'N/A'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 uppercase block font-semibold">Contact Mobile</span>
-                    <span className="font-mono text-slate-800 dark:text-slate-200">{activeCandidate.phone}</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 border-y border-slate-100 py-2 dark:border-slate-800">
-                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Father&apos;s Name</span><span>{extendedKyc.father_name || 'N/A'}</span></div>
-                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Mother&apos;s Name</span><span>{extendedKyc.mother_name || 'N/A'}</span></div>
-                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Marital Status</span><span>{extendedKyc.marital_status || 'N/A'}</span></div>
-                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Gender</span><span>{extendedKyc.gender || 'N/A'}</span></div>
-                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Citizenship / Nagarikta No.</span><span className="break-all font-mono">{extendedKyc.citizenship_number || 'N/A'}</span></div>
-                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">NIN</span><span className="break-all font-mono">{extendedKyc.national_id_nin || 'N/A'}</span></div>
-                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Passport Issue Date</span><span>{extendedKyc.passport_issue_date || 'N/A'}</span></div>
-                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Passport Issue Place</span><span>{extendedKyc.passport_issue_place || 'N/A'}</span></div>
-                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Emergency Contact</span><span>{extendedKyc.emergency_contact_name || 'N/A'}{extendedKyc.emergency_contact_relation ? ` (${extendedKyc.emergency_contact_relation})` : ''}</span></div>
-                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Emergency Phone</span><span className="break-all font-mono">{extendedKyc.emergency_contact_phone || 'N/A'}</span></div>
-                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Education</span><span>{extendedKyc.education_level || 'N/A'}</span></div>
-                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Relevant Experience</span><span>{extendedKyc.work_experience_years ? `${extendedKyc.work_experience_years} years` : 'N/A'}</span></div>
-                    <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Previous Schengen Visa</span><span>{extendedKyc.previous_schengen_visa || 'N/A'}</span></div>
-                    <div className="col-span-2"><span className="text-[9px] text-slate-400 uppercase block font-semibold">Work Skills Summary</span><span className="whitespace-pre-wrap">{extendedKyc.work_skills_summary || activeCandidate.workExperienceSummary || 'N/A'}</span></div>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 uppercase block font-semibold">Work Experience / Skills</span>
-                    <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug">
-                      {activeCandidate.workExperienceSummary || 'Certified field agriculturist with greenhouse & seasonal harvesting qualifications.'}
-                    </p>
+
+                  {/* Rejection / Correction Preset Chips */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Presets:</span>
+                    {['Blurry / Unreadable Scan', 'All 4 Corners Must Be Visible', 'Name / DOB Mismatch', 'Europass CV Format Required', 'Unverifiable Transaction Reference'].map((reason) => (
+                      <button
+                        key={reason}
+                        type="button"
+                        onClick={() => {
+                          setKycRejectionNote(reason);
+                          setIsRejectKycModalOpen(true);
+                        }}
+                        className="rounded-md border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800/60 px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-white/20 transition-colors"
+                      >
+                        {reason}
+                      </button>
+                    ))}
                   </div>
 
                   {activeCandidate.kycNote && (
-                    <div className="p-2 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300">
+                    <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300">
                       <strong>Caseworker Note:</strong> {activeCandidate.kycNote}
                     </div>
                   )}
                 </div>
 
-                {/* Caseworker KYC Controls */}
-                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
-                  <button
-                    onClick={handleApproveKyc}
-                    className="flex-1 py-1.5 px-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center justify-center gap-1 transition-colors"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Approve KYC</span>
-                  </button>
-                  <button
-                    onClick={() => setIsRejectKycModalOpen(true)}
-                    className="py-1.5 px-2 text-xs font-bold rounded-lg border border-red-300 bg-white dark:bg-slate-800 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
-                  >
-                    Flag / Reject
-                  </button>
-                </div>
-              </div>
+                {/* Structured Dossier Data Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Card 1: Personal & Biometric KYC */}
+                  <div className="bg-white dark:bg-slate-900/90 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-white/[0.08] space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/[0.08] pb-2">
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                        Personal &amp; Statutory Identity
+                      </h4>
+                    </div>
 
-              {/* Interactive Document Viewer Column (7 cols) */}
-              <div className="md:col-span-7 bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 space-y-3">
-                {/* File Switcher & Controls */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
-                  <select
-                    value={selectedDocId}
-                    onChange={(e) => setSelectedDocId(e.target.value)}
-                    className="w-full sm:w-auto text-xs font-bold p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200"
-                  >
-                    {activeCandidate.documents.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.title} ({d.status.toUpperCase()})
-                      </option>
-                    ))}
-                  </select>
+                    <div className="flex items-center gap-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 p-2.5 border border-slate-200/60 dark:border-white/5">
+                      <div className="h-16 w-14 shrink-0 overflow-hidden rounded-lg border border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
+                        {activeCandidate.avatarUrl ? (
+                          <img src={activeCandidate.avatarUrl} alt={`${activeCandidate.name} biometric avatar`} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-[10px] text-slate-500">No photo</div>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-[10px] text-slate-400 uppercase block font-semibold">Biometric Avatar</span>
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{activeCandidate.name}</span>
+                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">{activeCandidate.passportNumber}</div>
+                      </div>
+                    </div>
 
-                  {/* Viewer zoom & rotate tools */}
-                  <div className="flex items-center gap-1 ml-auto">
-                    <button
-                      onClick={() => setZoomLevel(Math.max(50, zoomLevel - 15))}
-                      className="p-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
-                      title="Zoom Out"
-                    >
-                      <ZoomOut className="w-3.5 h-3.5" />
-                    </button>
-                    <span className="text-[10px] font-mono font-bold px-1">{zoomLevel}%</span>
-                    <button
-                      onClick={() => setZoomLevel(Math.min(200, zoomLevel + 15))}
-                      className="p-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
-                      title="Zoom In"
-                    >
-                      <ZoomIn className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => setRotationAngle((rotationAngle + 90) % 360)}
-                      className="p-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 ml-1"
-                      title="Rotate 90 Clockwise"
-                    >
-                      <RotateCw className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                      <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Date of Birth</span><span className="text-slate-800 dark:text-slate-200 font-medium">{activeCandidate.dob}</span></div>
+                      <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Nationality</span><span className="text-slate-800 dark:text-slate-200 font-medium">{activeCandidate.nationality}</span></div>
+                      <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Passport Expiry</span><span className="font-mono text-slate-800 dark:text-slate-200 font-medium">{activeCandidate.passportExpiry || '2033-04-18'}</span></div>
+                      <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Contact Mobile</span><span className="font-mono text-slate-800 dark:text-slate-200 font-medium">{activeCandidate.phone}</span></div>
+                      <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Father&apos;s Name</span><span className="text-slate-700 dark:text-slate-300">{extendedKyc.father_name || 'N/A'}</span></div>
+                      <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Mother&apos;s Name</span><span className="text-slate-700 dark:text-slate-300">{extendedKyc.mother_name || 'N/A'}</span></div>
+                      <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Gender</span><span className="text-slate-700 dark:text-slate-300">{extendedKyc.gender || 'N/A'}</span></div>
+                      <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Marital Status</span><span className="text-slate-700 dark:text-slate-300">{extendedKyc.marital_status || 'N/A'}</span></div>
+                      <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Citizenship / Nagarikta</span><span className="font-mono text-slate-700 dark:text-slate-300">{extendedKyc.citizenship_number || 'N/A'}</span></div>
+                      <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">NIN</span><span className="font-mono text-slate-700 dark:text-slate-300">{extendedKyc.national_id_nin || 'N/A'}</span></div>
+                      <div className="col-span-2"><span className="text-[9px] text-slate-400 uppercase block font-semibold">Permanent Address</span><span className="text-slate-700 dark:text-slate-300">{activeCandidate.permanentAddress || 'N/A'}</span></div>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Employment & Sponsorship */}
+                  <div className="bg-white dark:bg-slate-900/90 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-white/[0.08] space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/[0.08] pb-2">
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                        Sponsorship &amp; Consular Case
+                      </h4>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                      <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Assigned Employer</span><span className="font-bold text-slate-800 dark:text-slate-200">{activeCandidate.employer?.name || 'AgroNord A/S'}</span></div>
+                      <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Sponsor Code</span><span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{activeCandidate.employer?.sponsorCode || '#944135'}</span></div>
+                      <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Visa Scheme</span><span className="text-slate-800 dark:text-slate-200">{activeCandidate.jobTitle}</span></div>
+                      <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">SIRI Case Order ID</span><span className="font-mono text-slate-800 dark:text-slate-200">{activeCandidate.siriCaseOrder?.caseOrderId}</span></div>
+                      <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Education Level</span><span className="text-slate-700 dark:text-slate-300">{extendedKyc.education_level || 'Vocational Certificate'}</span></div>
+                      <div><span className="text-[9px] text-slate-400 uppercase block font-semibold">Work Experience</span><span className="text-slate-700 dark:text-slate-300">{extendedKyc.work_experience_years ? `${extendedKyc.work_experience_years} years` : '3+ years'}</span></div>
+                      <div className="col-span-2">
+                        <span className="text-[9px] text-slate-400 uppercase block font-semibold">Work Experience / Skills</span>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug mt-0.5">
+                          {activeCandidate.workExperienceSummary || 'Certified field agriculturist with greenhouse & seasonal harvesting qualifications.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 dark:border-white/[0.08]">
+                      <PrivateDossierSummary candidate={activeCandidate} />
+                    </div>
                   </div>
                 </div>
 
-                {/* Document Display Window */}
-                {activeDoc ? (
-                  <div className="space-y-3">
-                    <div className="relative border border-slate-200 dark:border-slate-800 rounded-xl p-4 bg-slate-50 dark:bg-slate-950/50 min-h-[220px] max-h-[340px] overflow-auto flex flex-col justify-between">
-                      <div
-                        style={{
-                          transform: `scale(${zoomLevel / 100}) rotate(${rotationAngle}deg)`,
-                          transformOrigin: 'top center',
-                          transition: 'transform 0.2s ease',
-                        }}
-                        className="space-y-2"
+                {/* Sub-tools for Overview */}
+                <AdminCaseTools candidate={activeCandidate} actor={user.name} activeTab="overview" />
+              </div>
+            )}
+
+            {/* TAB 2: DOCUMENTS & VAULT */}
+            {activeTab === 'documents' && (
+              <div className="bg-white dark:bg-slate-900/90 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-white/[0.08] space-y-4 animate-fade-in">
+                <div className="flex flex-col md:flex-row gap-4 items-start">
+                  {/* Sub-pane A: Documents List */}
+                  <div className="w-full md:w-80 shrink-0 space-y-2 border-b md:border-b-0 md:border-r border-slate-200 dark:border-white/[0.08] pr-0 md:pr-4 pb-4 md:pb-0">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-white/[0.08]">
+                      <span className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                        Document Vault ({activeCandidate.documents.length})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsDispatchModalOpen(true)}
+                        className="text-[10px] font-bold text-brand-primary hover:underline"
                       >
-                        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-1.5">
-                          <div>
-                            <span className="font-extrabold text-xs text-slate-900 dark:text-slate-100">
-                              {activeDoc.title}
-                            </span>
-                            <div className="text-[10px] text-slate-400 font-mono">
-                              {activeDoc.docId} &middot; {activeDoc.authority}
-                            </div>
-                          </div>
-                          <span
-                            className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase ${
-                              activeDoc.status === 'verified'
-                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                                : activeDoc.status === 'signed_pending_review'
-                                ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
-                                : activeDoc.status === 'rejected'
-                                ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
-                                : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                        + Upload / Dispatch
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5 max-h-[550px] overflow-y-auto pr-1 custom-scrollbar">
+                      {activeCandidate.documents.map((d) => {
+                        const isDocActive = d.id === (activeDoc?.id || '');
+                        return (
+                          <div
+                            key={d.id}
+                            onClick={() => setSelectedDocId(d.id)}
+                            className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                              isDocActive
+                                ? 'bg-emerald-500/10 dark:bg-emerald-950/40 border-emerald-500/50 ring-1 ring-emerald-500/40'
+                                : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200/80 dark:border-white/5 hover:border-slate-300 dark:hover:border-white/20'
                             }`}
                           >
-                            {activeDoc.status}
-                          </span>
-                        </div>
-
-                        <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed pt-1">
-                          {activeDoc.body ||
-                            `Official statutory document record issued under Danish Green Sector labor agreements. File: ${activeDoc.filename}`}
-                        </p>
-
-                        {activeDoc.fileUrl && (
-                          /\.(pdf|html?)($|\?)/i.test(activeDoc.filename) || activeDoc.fileType === 'application/pdf'
-                            ? <iframe title={`${activeDoc.title} preview`} src={activeDoc.fileUrl} className="mt-3 h-64 w-full rounded border border-slate-300 bg-white dark:border-slate-700" />
-                            : <img src={activeDoc.fileUrl} alt={`${activeDoc.title} uploaded file`} className="mt-3 max-h-64 max-w-full rounded border border-slate-300 object-contain dark:border-slate-700" />
-                        )}
-
-                        {/* If document was signed by candidate, show signature proof */}
-                        {activeDoc.signatureDataUrl && (
-                          <div className="mt-3 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between gap-3">
-                            <div>
-                              <span className="text-[10px] font-bold text-emerald-900 dark:text-emerald-200 block">
-                                Candidate Electronic Signature Attached
-                              </span>
-                              <span className="text-[10px] text-slate-500">
-                                Signer: {activeDoc.signerLegalName || activeCandidate.name} &middot; {activeDoc.signedAt ? new Date(activeDoc.signedAt).toLocaleDateString() : 'Recent'}
+                            <div className="flex items-start justify-between gap-1.5">
+                              <div className="min-w-0">
+                                <span className="font-bold text-xs text-slate-800 dark:text-slate-200 block truncate">
+                                  {d.title}
+                                </span>
+                                <div className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">
+                                  {d.docId} &middot; {d.authority}
+                                </div>
+                              </div>
+                              <span
+                                className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0 ${
+                                  d.status === 'verified'
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                    : d.status === 'signed_pending_review'
+                                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+                                    : d.status === 'rejected'
+                                    ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
+                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                }`}
+                              >
+                                {d.status}
                               </span>
                             </div>
-                            <div className="p-1 bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700 flex-shrink-0">
-                              <img
-                                src={activeDoc.signatureDataUrl}
-                                alt="Signature"
-                                className="max-h-8 object-contain"
-                              />
+
+                            {d.signatureDataUrl && (
+                              <div className="mt-1.5 flex items-center gap-1 text-[9px] text-emerald-600 dark:text-emerald-400 font-medium">
+                                <CheckCircle className="w-3 h-3" />
+                                <span>Candidate Signed</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {activeCandidate.documents.length === 0 && (
+                        <div className="text-center py-8 text-xs text-slate-400">
+                          No documents uploaded yet.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Sub-pane B: Document Inspector */}
+                  <div className="flex-1 min-w-0 space-y-3">
+                    {activeDoc ? (
+                      <div className="space-y-3">
+                        {/* Inspector Top Controls */}
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-white/[0.08] pb-2">
+                          <div>
+                            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                              {activeDoc.title}
+                            </h3>
+                            <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                              ID: {activeDoc.docId} &middot; Issuer: {activeDoc.authority} &middot; Category: {activeDoc.category}
                             </div>
                           </div>
-                        )}
-                      </div>
-                    </div>
 
-                    {/* Document Verification & Rejection Controls */}
-                    <div className="flex items-center justify-between gap-2 pt-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <button
-                          onClick={() => setIsLightboxOpen(true)}
-                          className="px-2.5 py-1.5 text-xs font-semibold rounded bg-sky-50 dark:bg-sky-950/40 border border-sky-300 dark:border-sky-800 text-sky-800 dark:text-sky-300 hover:bg-sky-100 flex items-center gap-1"
-                          title="Full-Screen Side-by-Side Lightbox Document & KYC Inspector"
-                        >
-                          <Maximize2 className="w-3.5 h-3.5" />
-                          <span>Split-View Inspector</span>
-                        </button>
-                        <button
-                          onClick={() => setActiveDocForFullPreview(activeDoc)}
-                          className="px-2.5 py-1.5 text-xs font-semibold rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-brand-primary flex items-center gap-1"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>Full View</span>
-                        </button>
-                        <button
-                          onClick={() => handleDownloadDoc(activeDoc)}
-                          className="px-2.5 py-1.5 text-xs font-semibold rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-brand-primary flex items-center gap-1"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>PDF</span>
-                        </button>
-                      </div>
+                          <div className="flex items-center gap-1.5 flex-wrap ml-auto">
+                            <div className="flex items-center gap-1 mr-2 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-white/10">
+                              <button
+                                type="button"
+                                onClick={() => setZoomLevel(Math.max(50, zoomLevel - 15))}
+                                className="p-1 rounded text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                                title="Zoom Out"
+                              >
+                                <ZoomOut className="w-3.5 h-3.5" />
+                              </button>
+                              <span className="text-[10px] font-mono font-bold px-1 text-slate-700 dark:text-slate-300">{zoomLevel}%</span>
+                              <button
+                                type="button"
+                                onClick={() => setZoomLevel(Math.min(200, zoomLevel + 15))}
+                                className="p-1 rounded text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                                title="Zoom In"
+                              >
+                                <ZoomIn className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setRotationAngle((rotationAngle + 90) % 360)}
+                                className="p-1 rounded text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 ml-0.5"
+                                title="Rotate 90deg"
+                              >
+                                <RotateCw className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
 
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setIsRejectDocModalOpen(true)}
-                          className="px-3 py-1.5 text-xs font-bold rounded-lg border border-red-300 bg-white dark:bg-slate-800 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
-                        >
-                          Reject / Request Re-upload
-                        </button>
-                        <button
-                          onClick={handleVerifyDocument}
-                          className="px-4 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                          <span>Verify Document</span>
-                        </button>
+                            <button
+                              type="button"
+                              onClick={() => setIsLightboxOpen(true)}
+                              className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-sky-50 dark:bg-sky-950/40 border border-sky-300 dark:border-sky-800 text-sky-800 dark:text-sky-300 hover:bg-sky-100 flex items-center gap-1"
+                              title="Split-View Inspector"
+                            >
+                              <Maximize2 className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Split-View</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setActiveDocForFullPreview(activeDoc)}
+                              className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:border-emerald-500 flex items-center gap-1"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>View</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadDoc(activeDoc)}
+                              className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:border-emerald-500 flex items-center gap-1"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span>PDF</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Document Content Display Box */}
+                        <div className="relative border border-slate-200 dark:border-white/[0.08] rounded-2xl p-4 bg-slate-50 dark:bg-slate-950/60 min-h-[260px] max-h-[460px] overflow-auto custom-scrollbar flex flex-col justify-between">
+                          <div
+                            style={{
+                              transform: `scale(${zoomLevel / 100}) rotate(${rotationAngle}deg)`,
+                              transformOrigin: 'top center',
+                              transition: 'transform 0.2s ease',
+                            }}
+                            className="space-y-3"
+                          >
+                            <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/[0.08] pb-2">
+                              <div>
+                                <span className="font-extrabold text-xs text-slate-900 dark:text-slate-100">
+                                  {activeDoc.title}
+                                </span>
+                                <div className="text-[10px] text-slate-400 font-mono">
+                                  File: {activeDoc.filename}
+                                </div>
+                              </div>
+                              <span
+                                className={`text-[9px] font-bold px-2 py-0.5 rounded-md uppercase ${
+                                  activeDoc.status === 'verified'
+                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                    : activeDoc.status === 'signed_pending_review'
+                                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+                                    : activeDoc.status === 'rejected'
+                                    ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
+                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                }`}
+                              >
+                                {activeDoc.status}
+                              </span>
+                            </div>
+
+                            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                              {activeDoc.body ||
+                                `Official statutory document record issued under Danish Green Sector labor agreements. File: ${activeDoc.filename}`}
+                            </p>
+
+                            {activeDoc.fileUrl && (
+                              /\.(pdf|html?)($|\?)/i.test(activeDoc.filename) || activeDoc.fileType === 'application/pdf'
+                                ? <iframe title={`${activeDoc.title} preview`} src={activeDoc.fileUrl} className="mt-3 h-80 w-full rounded-xl border border-slate-300 dark:border-white/10 bg-white" />
+                                : <img src={activeDoc.fileUrl} alt={`${activeDoc.title} uploaded file`} className="mt-3 max-h-80 max-w-full rounded-xl border border-slate-300 dark:border-white/10 object-contain mx-auto" />
+                            )}
+
+                            {/* Electronic signature proof */}
+                            {activeDoc.signatureDataUrl && (
+                              <div className="mt-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between gap-3">
+                                <div>
+                                  <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 block">
+                                    Candidate Electronic Signature Attached
+                                  </span>
+                                  <span className="text-[10px] text-slate-500">
+                                    Signer: {activeDoc.signerLegalName || activeCandidate.name} &middot; Date: {activeDoc.signedAt ? new Date(activeDoc.signedAt).toLocaleString() : 'Recent'}
+                                  </span>
+                                </div>
+                                <div className="p-1 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 shrink-0">
+                                  <img
+                                    src={activeDoc.signatureDataUrl}
+                                    alt="Signature"
+                                    className="max-h-8 object-contain"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Inspector Bottom Action Controls */}
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-1 border-t border-slate-100 dark:border-white/[0.08]">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">Preset:</span>
+                            {['Blurry Scan', 'Missing Signature', 'Expired Document'].map((chip) => (
+                              <button
+                                key={chip}
+                                type="button"
+                                onClick={() => {
+                                  setRejectDocReason('custom');
+                                  setCustomRejectDocReason(chip);
+                                  setIsRejectDocModalOpen(true);
+                                }}
+                                className="px-2 py-0.5 text-[10px] rounded-md border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 transition-colors"
+                              >
+                                {chip}
+                              </button>
+                            ))}
+                          </div>
+
+                          <div className="flex items-center gap-2 ml-auto">
+                            <button
+                              type="button"
+                              onClick={() => setIsRejectDocModalOpen(true)}
+                              className="px-3 py-1.5 text-xs font-bold rounded-xl border border-red-300 bg-white dark:bg-slate-800 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                            >
+                              Reject / Re-upload
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleVerifyDocument}
+                              className="px-4 py-1.5 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1.5"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Verify Document</span>
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="text-center py-12 text-xs text-slate-400">
+                        No document selected.
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="text-center py-10 text-xs text-slate-400">
-                    No documents uploaded.
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* ======================================================== */}
-          {/* RIGHT PANE: Stage Controller + WhatsApp + Audit Log      */}
-          {/* (3 cols)                                                */}
-          {/* ======================================================== */}
-          <div className="lg:col-span-12 xl:col-span-3 space-y-4">
-            <PrivateDossierSummary candidate={activeCandidate} />
-            <AdminCaseTools candidate={activeCandidate} actor={user.name} />
-            {/* Gated 6-Stage Controller */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
-                <span className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-brand-primary" />
-                  <span>Workflow Controller</span>
-                </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
-                  Stage {activeCandidate.currentStage} of 6
-                </span>
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase block">Active Phase</span>
-                <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                  {activeCandidate.stages[activeCandidate.currentStage - 1]?.title || 'Processing'}
                 </div>
               </div>
+            )}
 
-              {/* Stage Step Buttons */}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={handleStageRollback}
-                  disabled={activeCandidate.currentStage <= 1}
-                  className="py-1.5 px-2 text-xs font-bold rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 disabled:opacity-40 flex items-center justify-center gap-1"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Rollback</span>
-                </button>
-                <button
-                  onClick={handleStageAdvance}
-                  disabled={activeCandidate.currentStage >= 6}
-                  className="py-1.5 px-2 text-xs font-bold rounded-lg bg-brand-primary hover:bg-brand-secondary text-white disabled:opacity-40 shadow-sm flex items-center justify-center gap-1"
-                >
-                  <span>Advance</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
+            {/* TAB 3: PAYMENTS & FINANCIAL */}
+            {activeTab === 'financial' && (
+              <div className="space-y-4 animate-fade-in">
+                <AdminCaseTools candidate={activeCandidate} actor={user.name} activeTab="financial" />
               </div>
+            )}
 
-              {/* Direct Stage Selector */}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                  Direct Stage Override
-                </label>
-                <select
-                  value={activeCandidate.currentStage}
-                  onChange={(e) => handleSetStage(parseInt(e.target.value, 10) as StageNumber)}
-                  className="w-full text-xs font-semibold p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200"
-                >
-                  {activeCandidate.stages.map((st) => (
-                    <option key={st.number} value={st.number}>
-                      Stage {st.number}: {st.title} {st.number >= 5 ? '(Gated)' : ''}
-                    </option>
-                  ))}
-                </select>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {['Blurry / Unreadable Scan', 'All 4 Corners Must Be Visible', 'Name / DOB Mismatch', 'Europass CV Format Required', 'Unverifiable Transaction Reference'].map((reason) => (
-                    <button key={reason} type="button" onClick={() => { setRejectDocReason('custom'); setCustomRejectDocReason(reason); }} className="rounded border border-red-200 bg-red-50 px-2 py-1 text-[9px] font-semibold text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">{reason}</button>
-                  ))}
-                </div>
+            {/* TAB 4: INTERVIEWS & NOTICES */}
+            {activeTab === 'interviews' && (
+              <div className="space-y-4 animate-fade-in">
+                <AdminCaseTools candidate={activeCandidate} actor={user.name} activeTab="interviews" />
               </div>
+            )}
 
-              {/* Stage 5 Gate Note */}
-              <div className="p-2 rounded bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-[10px] text-blue-800 dark:text-blue-300 flex items-start gap-1.5">
-                <Lock className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-                <span>Stage 5 requires KYC Clearance Approved + Identity Passport Verified.</span>
-              </div>
-            </div>
+            {/* TAB 5: AUDIT LOG & ACCOUNT */}
+            {activeTab === 'audit' && (
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 animate-fade-in">
+                {/* Timeline Column (8 cols) */}
+                <div className="md:col-span-8 bg-white dark:bg-slate-900/90 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-white/[0.08] space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/[0.08] pb-2">
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                      Chronological Consular &amp; Agency Audit Trail
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      {activeCandidate.auditLog?.length || 0} events
+                    </span>
+                  </div>
 
-            {/* One-Click WhatsApp Notification Button */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 space-y-2">
-              <span className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider block">
-                Instant Applicant Alerts
-              </span>
-              <p className="text-[11px] text-slate-500">
-                Send official SMS/WhatsApp dispatch directly to {activeCandidate.phone || 'candidate phone'}.
-              </p>
-              <button
-                type="button"
-                onClick={handleSendWhatsAppAlert}
-                className="w-full py-2 px-3 text-xs font-bold rounded-lg bg-[#25D366] hover:bg-[#20ba5a] text-white shadow-sm flex items-center justify-center gap-2 transition-colors"
-              >
-                <MessageCircle className="w-4 h-4" />
-                <span>Send WhatsApp Notice</span>
-              </button>
-            </div>
-
-            {/* Live Audit Log */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
-                <span className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-                  Live Consular Audit Log
-                </span>
-                <span className="text-[10px] text-slate-400">
-                  {activeCandidate.auditLog?.length || 0} events
-                </span>
-              </div>
-
-              <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
-                {activeCandidate.auditLog && activeCandidate.auditLog.length > 0 ? (
-                  activeCandidate.auditLog.map((log) => (
-                    <div key={log.id} className="text-xs p-2 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-0.5">
-                      <div className="flex items-center justify-between gap-1 text-[10px]">
-                        <span className="font-bold text-slate-800 dark:text-slate-200">{log.action}</span>
-                        <span className="text-slate-400">{new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1 custom-scrollbar">
+                    {activeCandidate.auditLog && activeCandidate.auditLog.length > 0 ? (
+                      activeCandidate.auditLog.map((log) => (
+                        <div key={log.id} className="text-xs p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-white/5 space-y-1">
+                          <div className="flex items-center justify-between gap-1 text-[11px]">
+                            <strong className="text-slate-900 dark:text-slate-100 font-bold">{log.action}</strong>
+                            <span className="text-slate-400 text-[10px]">
+                              {new Date(log.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug">
+                            {log.details}
+                          </p>
+                          <div className="text-[9px] text-slate-400">
+                            Logged by: <span className="font-medium text-slate-500 dark:text-slate-300">{log.actor}</span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8 text-xs text-slate-400">
+                        No logged events yet.
                       </div>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
-                        {log.details}
-                      </p>
-                      <div className="text-[9px] text-slate-400 italic">
-                        By {log.actor}
+                    )}
+                  </div>
+                </div>
+
+                {/* Account Settings & Controls Column (4 cols) */}
+                <div className="md:col-span-4 space-y-3">
+                  <div className="bg-white dark:bg-slate-900/90 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-white/[0.08] space-y-3">
+                    <div className="border-b border-slate-100 dark:border-white/[0.08] pb-2">
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                        Candidate Account Status
+                      </h4>
+                    </div>
+
+                    <div className="space-y-2 text-xs">
+                      <div>
+                        <span className="text-[9px] text-slate-400 uppercase block font-semibold">Account State</span>
+                        <span className={`inline-block mt-0.5 text-xs font-bold px-2 py-0.5 rounded-md uppercase ${
+                          activeCandidate.accountStatus === 'approved'
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                            : activeCandidate.accountStatus === 'pending_approval'
+                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                            : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
+                        }`}>
+                          {activeCandidate.accountStatus}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-[9px] text-slate-400 uppercase block font-semibold">Registered Email</span>
+                        <span className="font-mono text-slate-800 dark:text-slate-200">{activeCandidate.email}</span>
+                      </div>
+
+                      <div>
+                        <span className="text-[9px] text-slate-400 uppercase block font-semibold">Candidate Portal URL</span>
+                        <a
+                          href="https://denmarkrecruiter.netlify.app/"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-mono text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 text-[11px]"
+                        >
+                          <span>denmarkrecruiter.netlify.app</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center py-4 text-xs text-slate-400">
-                    No logged actions yet.
+
+                    <div className="pt-2 border-t border-slate-100 dark:border-white/[0.08] space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => void copyCandidateCard(activeCandidate)}
+                        className="w-full py-2 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center gap-1.5 transition-colors"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copy Login &amp; Onboarding Card</span>
+                      </button>
+
+                      {activeCandidate.accountStatus === 'approved' ? (
+                        <button
+                          type="button"
+                          onClick={() => setIsRejectAccountModalOpen(true)}
+                          className="w-full py-2 px-3 text-xs font-bold rounded-xl border border-red-300 dark:border-red-800/60 bg-red-50/50 dark:bg-red-950/20 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-950/40 transition-colors"
+                        >
+                          Suspend / Revoke Access
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleApproveAccount}
+                          className="w-full py-2 px-3 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          <Unlock className="w-3.5 h-3.5" />
+                          <span>Approve &amp; Unlock</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
-                )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </main>
