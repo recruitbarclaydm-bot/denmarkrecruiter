@@ -37,6 +37,7 @@ interface PortalStoreContextType {
   uploadCandidateAvatar: (candidateId: string, file: File) => Promise<void>;
   uploadCoreDocument: (candidateId: string, name: string, category: string, file: File, existingDocumentId?: string) => Promise<void>;
   selectCandidate: (id: string) => void;
+  deleteCandidatePermanently: (candidateId: string) => Promise<void>;
   approveAccount: (candidateId: string, sponsorCode?: string, caseOrderId?: string, actor?: string) => void;
   rejectAccount: (candidateId: string, reason: string, actor?: string) => void;
   verifyDocument: (candidateId: string, docId: string, actor?: string) => void;
@@ -973,6 +974,70 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
     saveToStorage(updated);
   };
 
+  // Permanent Candidate Deletion (Storage + DB + Auth RPC)
+  const deleteCandidatePermanently = async (candidateId: string): Promise<void> => {
+    try {
+      // 1. List and remove all objects in private 'dossier-documents' bucket under folder `${candidateId}`
+      const { data: files, error: listError } = await supabase.storage
+        .from('dossier-documents')
+        .list(candidateId);
+
+      const pathsToRemove: string[] = [];
+      if (!listError && files && files.length > 0) {
+        for (const file of files) {
+          pathsToRemove.push(`${candidateId}/${file.name}`);
+        }
+      }
+
+      // Also collect any explicit storage paths recorded in candidate records
+      const targetCandidate = candidatesRef.current.find((c) => c.id === candidateId);
+      if (targetCandidate) {
+        if (targetCandidate.avatarStoragePath) {
+          pathsToRemove.push(targetCandidate.avatarStoragePath);
+        }
+        for (const doc of targetCandidate.documents) {
+          if (doc.storagePath) {
+            pathsToRemove.push(doc.storagePath);
+          }
+        }
+      }
+
+      const uniquePaths = Array.from(new Set(pathsToRemove));
+      if (uniquePaths.length > 0) {
+        await supabase.storage.from('dossier-documents').remove(uniquePaths);
+      }
+
+      // 2. Call RPC 'delete_candidate_permanently' to permanently delete records and auth user
+      const { error: rpcError } = await supabase.rpc('delete_candidate_permanently', {
+        target_candidate_id: candidateId,
+      });
+
+      if (rpcError) {
+        console.warn('RPC delete_candidate_permanently failed or not found, performing cascade delete fallback:', rpcError);
+        await supabase.from('notifications').delete().eq('candidate_id', candidateId);
+        await supabase.from('audit_logs').delete().eq('candidate_id', candidateId);
+        await supabase.from('dossier_documents').delete().eq('candidate_id', candidateId);
+        const { error: candidateDelError } = await supabase.from('candidates').delete().eq('id', candidateId);
+        if (candidateDelError) throw candidateDelError;
+      }
+
+      // 3. Refresh local store state and select next candidate
+      const remaining = candidatesRef.current.filter((c) => c.id !== candidateId);
+      candidatesRef.current = remaining;
+      setCandidates(remaining);
+
+      if (selectedCandidateId === candidateId) {
+        const nextId = remaining[0]?.id || '';
+        setSelectedCandidateId(nextId);
+      }
+
+      await refreshStore();
+    } catch (error) {
+      console.error('Error permanently deleting candidate:', error);
+      throw error;
+    }
+  };
+
   // Document Verification
   const verifyDocument = (
     candidateId: string,
@@ -1694,6 +1759,7 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
         uploadCandidateAvatar,
         uploadCoreDocument,
         selectCandidate,
+        deleteCandidatePermanently,
         approveAccount,
         rejectAccount,
         verifyDocument,

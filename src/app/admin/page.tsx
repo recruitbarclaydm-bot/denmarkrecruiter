@@ -18,6 +18,8 @@ import { generateDocumentPdf } from '@/lib/pdfGenerator';
 import { seedDipakAndNokha } from '@/lib/cloudSeeder';
 import { INITIAL_CANDIDATES } from '@/data/mockUsers';
 import { DocumentRecord, StageNumber, DocumentStatus, AccountStatus, KycStatus } from '@/types';
+import JSZip from 'jszip';
+import { supabase, getSignedDocumentUrl } from '@/lib/supabase';
 import {
   Search,
   Filter,
@@ -54,6 +56,13 @@ import {
   ExternalLink,
   DollarSign,
   Video,
+  Trash2,
+  Key,
+  Archive,
+  ShieldAlert,
+  PauseCircle,
+  PlayCircle,
+  Package,
   X as CloseIcon,
 } from 'lucide-react';
 
@@ -68,6 +77,7 @@ export default function AdminPage() {
     isInitialized,
     selectedCandidateId,
     selectCandidate,
+    deleteCandidatePermanently,
     approveAccount,
     rejectAccount,
     verifyDocument,
@@ -120,6 +130,15 @@ export default function AdminPage() {
   // KYC Reject Form
   const [isRejectKycModalOpen, setIsRejectKycModalOpen] = useState(false);
   const [kycRejectionNote, setKycRejectionNote] = useState('Passport photo page is partially obscured. Please provide a clear color scan.');
+
+  // Account Hold & Danger Zone States
+  const [isExportingZip, setIsExportingZip] = useState(false);
+  const [isSendingPasswordReset, setIsSendingPasswordReset] = useState(false);
+  const [isHoldModalOpen, setIsHoldModalOpen] = useState(false);
+  const [holdReason, setHoldReason] = useState('Account temporarily placed on administrative hold pending caseworker review.');
+  const [isPermanentDeleteModalOpen, setIsPermanentDeleteModalOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeletingPermanently, setIsDeletingPermanently] = useState(false);
 
   // Admin Guard
   useEffect(() => {
@@ -336,6 +355,228 @@ Please log in to complete your KYC declaration and review official documents.`;
     const message = `Hello ${activeCandidate.name}, this is ${user.name} from your private recruitment coordination team regarding your application (${activeCandidate.passportNumber}). Current workflow: Stage ${activeCandidate.currentStage}, ${stageTitle}. Please log in to your candidate portal for updates.`;
     const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
     window.open(waUrl, '_blank');
+  };
+
+  // 1-Click Full Dossier ZIP Export (Summary + Documents + Signatures)
+  const handleDownloadFullDossierZip = async () => {
+    setIsExportingZip(true);
+    showToast(`Packaging full dossier for ${activeCandidate.name}...`, 'info');
+    try {
+      const zip = new JSZip();
+
+      // 1. Text Summary File
+      const summaryLines = [
+        '=========================================================================',
+        '       DENMARK RECRUITER & SIRI IMMIGRATION CANDIDATE DOSSIER',
+        '=========================================================================',
+        `Generated On:           ${new Date().toLocaleString()}`,
+        `Caseworker / Actor:     ${user.name}`,
+        `Dossier Status:         ${activeCandidate.accountStatus.toUpperCase()} (KYC: ${activeCandidate.kycStatus.toUpperCase()})`,
+        `Current Workflow Stage: Stage ${activeCandidate.currentStage} of 6 - ${activeCandidate.stages[activeCandidate.currentStage - 1]?.title || 'Processing'}`,
+        '',
+        '-------------------------------------------------------------------------',
+        '1. CANDIDATE IDENTIFICATION & STATUTORY DETAILS',
+        '-------------------------------------------------------------------------',
+        `Full Legal Name:        ${activeCandidate.name}`,
+        `Passport Number:        ${activeCandidate.passportNumber}`,
+        `Passport Expiry:        ${activeCandidate.passportExpiry || 'N/A'}`,
+        `Date of Birth:          ${activeCandidate.dob || 'N/A'}`,
+        `Nationality:            ${activeCandidate.nationality || 'Nepalese'}`,
+        `Contact Mobile:         ${activeCandidate.phone || 'N/A'}`,
+        `Registered Email:       ${activeCandidate.email}`,
+        `Permanent Address:      ${activeCandidate.permanentAddress || 'N/A'}`,
+        '',
+        '-------------------------------------------------------------------------',
+        '2. EXTENDED STATUTORY KYC DATA (NEPAL / SIRI)',
+        '-------------------------------------------------------------------------',
+        `Father's Name:          ${extendedKyc.father_name || 'N/A'}`,
+        `Mother's Name:          ${extendedKyc.mother_name || 'N/A'}`,
+        `Gender:                 ${extendedKyc.gender || 'N/A'}`,
+        `Marital Status:         ${extendedKyc.marital_status || 'N/A'}`,
+        `Citizenship / Nagarikta:${extendedKyc.citizenship_number || 'N/A'}`,
+        `National ID (NIN):      ${extendedKyc.national_id_nin || 'N/A'}`,
+        `Passport Issue Date:    ${extendedKyc.passport_issue_date || 'N/A'}`,
+        `Passport Issue Place:   ${extendedKyc.passport_issue_place || 'N/A'}`,
+        `Emergency Contact:      ${extendedKyc.emergency_contact_name || 'N/A'}${extendedKyc.emergency_contact_relation ? ` (${extendedKyc.emergency_contact_relation})` : ''} - Phone: ${extendedKyc.emergency_contact_phone || 'N/A'}`,
+        `Education Level:        ${extendedKyc.education_level || 'N/A'}`,
+        `Relevant Experience:    ${extendedKyc.work_experience_years ? `${extendedKyc.work_experience_years} years` : 'N/A'}`,
+        `Previous Schengen Visa: ${extendedKyc.previous_schengen_visa || 'None'}`,
+        `Work Skills Summary:    ${extendedKyc.work_skills_summary || activeCandidate.workExperienceSummary || 'N/A'}`,
+        `Caseworker KYC Note:    ${activeCandidate.kycNote || 'None'}`,
+        '',
+        '-------------------------------------------------------------------------',
+        '3. EMPLOYER SPONSORSHIP & CONSULAR CASE',
+        '-------------------------------------------------------------------------',
+        `Assigned Employer:      ${activeCandidate.employer?.name || 'AgroNord A/S'}`,
+        `Sponsor Code:           ${activeCandidate.employer?.sponsorCode || '#944135'}`,
+        `Employer CVR:           ${activeCandidate.employer?.cvr || 'DK-39841209'}`,
+        `Visa Placement Scheme:  ${activeCandidate.jobTitle}`,
+        `Monthly Salary / Hours: ${activeCandidate.employer?.monthlySalary || '28,500 DKK'} / ${activeCandidate.employer?.workingHours || '37 hrs/week'}`,
+        `SIRI Case Order ID:     ${activeCandidate.siriCaseOrder?.caseOrderId || 'Assigned'}`,
+        `Statutory Fee Status:   ${activeCandidate.siriCaseOrder?.feeStatus?.toUpperCase() || 'PAID'} (${activeCandidate.siriCaseOrder?.statutoryFee || '3,425 DKK'})`,
+        `VFS Biometrics Ref:     ${activeCandidate.vfsAppointment?.refNumber || 'N/A'}`,
+        `VFS Center Location:    ${activeCandidate.vfsAppointment?.centerName || 'VFS Global Kathmandu'} (${activeCandidate.vfsAppointment?.appointmentDate || 'Confirmed'})`,
+        '',
+        '-------------------------------------------------------------------------',
+        '4. FINANCIALS & DENBAR ACCOUNT',
+        '-------------------------------------------------------------------------',
+        `Denbar Account Balance: ${activeCandidate.denbarAccount?.amount || '€0.00'}`,
+        `Denbar Account Status:  ${activeCandidate.denbarAccount?.status || 'N/A'}`,
+        `Subscription Status:    ${activeCandidate.actionRequired?.subscription || 'N/A'}`,
+        '',
+        '-------------------------------------------------------------------------',
+        '5. UPLOADED & DISPATCHED DOSSIER DOCUMENTS',
+        '-------------------------------------------------------------------------',
+        ...activeCandidate.documents.map((doc, idx) =>
+          `[${idx + 1}] ${doc.title} | Category: ${doc.category || 'General'} | Status: ${doc.status.toUpperCase()} | Authority: ${doc.authority} | Doc ID: ${doc.docId} | File: ${doc.filename}`
+        ),
+        '',
+        '-------------------------------------------------------------------------',
+        '6. CONSULAR & AGENCY AUDIT TRAIL',
+        '-------------------------------------------------------------------------',
+        ...activeCandidate.auditLog.map((log) =>
+          `[${new Date(log.timestamp).toISOString()}] ${log.action} | Actor: ${log.actor} | Details: ${log.details}`
+        ),
+        '=========================================================================',
+      ];
+
+      zip.file('00_Candidate_Summary.txt', summaryLines.join('\r\n'));
+
+      // 2. Fetch and pack each document file
+      for (let i = 0; i < activeCandidate.documents.length; i++) {
+        const doc = activeCandidate.documents[i];
+        const indexNum = String(i + 1).padStart(2, '0');
+        const safeTitle = (doc.title || doc.filename || `document_${i + 1}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+
+        let extension = 'pdf';
+        if (doc.filename && doc.filename.includes('.')) {
+          extension = doc.filename.split('.').pop() || 'pdf';
+        }
+
+        const zipFileName = `${indexNum}_${safeTitle}.${extension}`;
+
+        let addedFile = false;
+        let targetUrl = doc.fileUrl;
+        if (!targetUrl && doc.storagePath) {
+          try {
+            targetUrl = (await getSignedDocumentUrl(doc.storagePath)) || undefined;
+          } catch {
+            // pass
+          }
+        }
+
+        if (targetUrl) {
+          try {
+            const res = await fetch(targetUrl);
+            if (res.ok) {
+              const blob = await res.blob();
+              zip.file(zipFileName, blob);
+              addedFile = true;
+            }
+          } catch (fetchErr) {
+            console.warn(`Could not fetch binary for ${doc.title}:`, fetchErr);
+          }
+        }
+
+        if (!addedFile && doc.body) {
+          zip.file(
+            `${indexNum}_${safeTitle}.txt`,
+            `Document: ${doc.title}\nAuthority: ${doc.authority}\nDate: ${doc.date}\nStatus: ${doc.status}\n\n${doc.body}`
+          );
+        }
+      }
+
+      // 3. Add biometric signature if available
+      if (activeCandidate.signatureDataUrl && activeCandidate.signatureDataUrl.startsWith('data:image/')) {
+        try {
+          const base64Data = activeCandidate.signatureDataUrl.split(',')[1];
+          if (base64Data) {
+            zip.file('00_Biometric_Signature.png', base64Data, { base64: true });
+          }
+        } catch (e) {
+          console.warn('Error adding signature image to zip', e);
+        }
+      }
+
+      // 4. Generate and download zip
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const zipName = `${activeCandidate.name.replace(/\s+/g, '_')}_${activeCandidate.passportNumber || 'Dossier'}.zip`;
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = zipName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(downloadUrl);
+
+      showToast(`Dossier package "${zipName}" downloaded successfully!`, 'success');
+    } catch (error) {
+      console.error('Failed to export dossier ZIP:', error);
+      showToast('Failed to generate ZIP export. Please try again.', 'error');
+    } finally {
+      setIsExportingZip(false);
+    }
+  };
+
+  // Password Reset Email Dispatch
+  const handleSendPasswordReset = async () => {
+    setIsSendingPasswordReset(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(activeCandidate.email, {
+        redirectTo: window.location.origin,
+      });
+      if (error) throw error;
+      showToast(`Password reset instructions emailed to ${activeCandidate.email}.`, 'success');
+    } catch (err) {
+      console.error('Password reset email error:', err);
+      showToast(err instanceof Error ? err.message : 'Failed to dispatch password reset email.', 'error');
+    } finally {
+      setIsSendingPasswordReset(false);
+    }
+  };
+
+  // Account Hold & Reactivation
+  const handleConfirmAccountHold = () => {
+    if (!holdReason.trim()) {
+      showToast('Please provide a reason for placing account on hold.', 'error');
+      return;
+    }
+    rejectAccount(activeCandidate.id, holdReason.trim(), user.name);
+    setIsHoldModalOpen(false);
+    showToast(`Account for ${activeCandidate.name} has been placed on Administrative Hold.`, 'warning');
+  };
+
+  const handleReactivateAccount = () => {
+    approveAccount(
+      activeCandidate.id,
+      activeCandidate.employer?.sponsorCode || '#944135',
+      activeCandidate.siriCaseOrder?.caseOrderId || `SB6-${Math.floor(100000 + Math.random() * 900000)}-2026`,
+      user.name
+    );
+    showToast(`Account for ${activeCandidate.name} has been reactivated and unlocked.`, 'success');
+  };
+
+  // Permanent Candidate Deletion
+  const isDeleteConfirmed =
+    deleteConfirmText.trim().toUpperCase() === 'DELETE' ||
+    (Boolean(activeCandidate.passportNumber) &&
+      deleteConfirmText.trim().toUpperCase() === activeCandidate.passportNumber.toUpperCase());
+
+  const handleConfirmPermanentDelete = async () => {
+    if (!isDeleteConfirmed) return;
+    setIsDeletingPermanently(true);
+    try {
+      await deleteCandidatePermanently(activeCandidate.id);
+      showToast(`Candidate "${activeCandidate.name}" and all storage files were permanently deleted.`, 'success');
+      setIsPermanentDeleteModalOpen(false);
+      setDeleteConfirmText('');
+    } catch (err) {
+      console.error('Permanent delete failed:', err);
+      showToast(err instanceof Error ? err.message : 'Permanent deletion failed.', 'error');
+    } finally {
+      setIsDeletingPermanently(false);
+    }
   };
 
   const globalActivity = candidates.flatMap((candidate) => candidate.auditLog.map((log) => ({ candidate, log })))
@@ -840,6 +1081,21 @@ Please log in to complete your KYC declaration and review official documents.`;
                     title="Send WhatsApp Alert"
                   >
                     <MessageCircle className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleDownloadFullDossierZip}
+                    disabled={isExportingZip}
+                    className="p-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    title="Download Full Candidate Dossier as ZIP (Summary + Documents)"
+                  >
+                    {isExportingZip ? (
+                      <RefreshCw className="w-4 h-4 animate-spin text-emerald-500" />
+                    ) : (
+                      <Package className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    )}
+                    <span className="hidden sm:inline font-bold">Download ZIP</span>
                   </button>
 
                   <button
@@ -1478,36 +1734,34 @@ Please log in to complete your KYC declaration and review official documents.`;
                   </div>
                 </div>
 
-                {/* Account Settings & Controls Column (4 cols) */}
+                {/* Account Settings & Danger Zone Column (4 cols) */}
                 <div className="md:col-span-4 space-y-3">
+                  {/* Card 1: Account Access Controls */}
                   <div className="bg-white dark:bg-slate-900/90 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-white/[0.08] space-y-3">
-                    <div className="border-b border-slate-100 dark:border-white/[0.08] pb-2">
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-                        Candidate Account Status
+                    <div className="border-b border-slate-100 dark:border-white/[0.08] pb-2 flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider flex items-center gap-1.5">
+                        <Key className="w-3.5 h-3.5 text-brand-primary" />
+                        <span>Account &amp; Security Controls</span>
                       </h4>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${
+                        activeCandidate.accountStatus === 'approved'
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                          : activeCandidate.accountStatus === 'pending_approval'
+                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                          : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
+                      }`}>
+                        {activeCandidate.accountStatus === 'rejected' ? 'On Hold / Suspended' : activeCandidate.accountStatus}
+                      </span>
                     </div>
 
                     <div className="space-y-2 text-xs">
-                      <div>
-                        <span className="text-[9px] text-slate-400 uppercase block font-semibold">Account State</span>
-                        <span className={`inline-block mt-0.5 text-xs font-bold px-2 py-0.5 rounded-md uppercase ${
-                          activeCandidate.accountStatus === 'approved'
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                            : activeCandidate.accountStatus === 'pending_approval'
-                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                            : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
-                        }`}>
-                          {activeCandidate.accountStatus}
-                        </span>
-                      </div>
-
                       <div>
                         <span className="text-[9px] text-slate-400 uppercase block font-semibold">Registered Email</span>
                         <span className="font-mono text-slate-800 dark:text-slate-200">{activeCandidate.email}</span>
                       </div>
 
                       <div>
-                        <span className="text-[9px] text-slate-400 uppercase block font-semibold">Candidate Portal URL</span>
+                        <span className="text-[9px] text-slate-400 uppercase block font-semibold">Candidate Portal Link</span>
                         <a
                           href="https://denmarkrecruiter.netlify.app/"
                           target="_blank"
@@ -1518,37 +1772,84 @@ Please log in to complete your KYC declaration and review official documents.`;
                           <ExternalLink className="w-3 h-3" />
                         </a>
                       </div>
+
+                      {activeCandidate.accountRejectionReason && activeCandidate.accountStatus === 'rejected' && (
+                        <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-300">
+                          <strong>Administrative Hold Reason:</strong> {activeCandidate.accountRejectionReason}
+                        </div>
+                      )}
                     </div>
 
                     <div className="pt-2 border-t border-slate-100 dark:border-white/[0.08] space-y-2">
-                      <button
-                        type="button"
-                        onClick={() => void copyCandidateCard(activeCandidate)}
-                        className="w-full py-2 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center gap-1.5 transition-colors"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Copy Login &amp; Onboarding Card</span>
-                      </button>
-
+                      {/* 1. Account Hold / Reactivate Toggle */}
                       {activeCandidate.accountStatus === 'approved' ? (
                         <button
                           type="button"
-                          onClick={() => setIsRejectAccountModalOpen(true)}
-                          className="w-full py-2 px-3 text-xs font-bold rounded-xl border border-red-300 dark:border-red-800/60 bg-red-50/50 dark:bg-red-950/20 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-950/40 transition-colors"
+                          onClick={() => setIsHoldModalOpen(true)}
+                          className="w-full py-2 px-3 text-xs font-bold rounded-xl border border-amber-300 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-950/50 flex items-center justify-center gap-1.5 transition-colors"
                         >
-                          Suspend / Revoke Access
+                          <PauseCircle className="w-3.5 h-3.5" />
+                          <span>Put Account on Administrative Hold</span>
                         </button>
                       ) : (
                         <button
                           type="button"
-                          onClick={handleApproveAccount}
+                          onClick={handleReactivateAccount}
                           className="w-full py-2 px-3 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center justify-center gap-1.5 transition-colors"
                         >
-                          <Unlock className="w-3.5 h-3.5" />
-                          <span>Approve &amp; Unlock</span>
+                          <PlayCircle className="w-3.5 h-3.5" />
+                          <span>Reactivate &amp; Unlock Portal Access</span>
                         </button>
                       )}
+
+                      {/* 2. Send Password Reset Email */}
+                      <button
+                        type="button"
+                        onClick={handleSendPasswordReset}
+                        disabled={isSendingPasswordReset}
+                        className="w-full py-2 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+                      >
+                        {isSendingPasswordReset ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-500" />
+                        ) : (
+                          <Key className="w-3.5 h-3.5 text-blue-500" />
+                        )}
+                        <span>{isSendingPasswordReset ? 'Sending Reset Instructions...' : 'Send Password Reset Email'}</span>
+                      </button>
+
+                      {/* Copy Login & Onboarding Card */}
+                      <button
+                        type="button"
+                        onClick={() => void copyCandidateCard(activeCandidate)}
+                        className="w-full py-2 px-3 text-xs font-semibold rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-center gap-1.5 transition-colors"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copy Onboarding Credentials Card</span>
+                      </button>
                     </div>
+                  </div>
+
+                  {/* Card 2: Danger Zone Card */}
+                  <div className="bg-red-500/[0.04] dark:bg-red-950/20 rounded-2xl p-4 border border-red-300/60 dark:border-red-900/40 space-y-3">
+                    <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
+                      <ShieldAlert className="w-4 h-4 shrink-0" />
+                      <h4 className="text-xs font-bold uppercase tracking-wider">
+                        Danger Zone &middot; Irreversible
+                      </h4>
+                    </div>
+
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug">
+                      Permanently delete this candidate from storage bucket, database tables, and authentication service.
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsPermanentDeleteModalOpen(true)}
+                      className="w-full py-2 px-3 text-xs font-bold rounded-xl border border-red-300 dark:border-red-800/80 bg-white dark:bg-red-950/40 text-red-600 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete Candidate Permanently</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1815,6 +2116,173 @@ Please log in to complete your KYC declaration and review official documents.`;
           showToast(`Document rejected and flagged for re-upload.`, 'warning');
         }}
       />
+
+      {/* Account Hold Modal */}
+      {isHoldModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-950 text-amber-600">
+                  <PauseCircle className="w-4 h-4" />
+                </span>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  Place Account On Administrative Hold
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsHoldModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <CloseIcon className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              Placing <strong>{activeCandidate.name}</strong>&apos;s account on hold will suspend portal access and send a notification dispatch to the applicant.
+            </p>
+
+            <div className="space-y-1">
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase">
+                Administrative Reason
+              </label>
+              <textarea
+                rows={3}
+                value={holdReason}
+                onChange={(e) => setHoldReason(e.target.value)}
+                placeholder="State reason for placing account on hold..."
+                className="w-full p-2.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsHoldModalOpen(false)}
+                className="px-3.5 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmAccountHold}
+                className="px-4 py-2 text-xs font-bold rounded-xl bg-amber-600 hover:bg-amber-700 text-white shadow-sm flex items-center gap-1.5"
+              >
+                <PauseCircle className="w-3.5 h-3.5" />
+                <span>Apply Administrative Hold</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Permanent Candidate Deletion Modal */}
+      {isPermanentDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-red-300 dark:border-red-900/60 p-6 space-y-4">
+            <div className="flex items-start justify-between gap-3 border-b border-red-100 dark:border-red-900/40 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 rounded-xl bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400">
+                  <Trash2 className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="text-base font-bold text-red-950 dark:text-red-100">
+                    Permanent Candidate Deletion
+                  </h3>
+                  <p className="text-xs text-red-700/80 dark:text-red-300/70">
+                    Irreversible Cloud Storage, Database &amp; Auth RPC Removal
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPermanentDeleteModalOpen(false);
+                  setDeleteConfirmText('');
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <CloseIcon className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-xs text-red-900 dark:text-red-200 space-y-2">
+              <div className="flex items-center gap-2 font-bold">
+                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                <span>Warning: This destructive operation cannot be undone.</span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-red-800 dark:text-red-300">
+                All uploaded passport scans, certificates, digital signatures, notifications, audit trails, and authentication credentials for this candidate will be purged permanently from Supabase Cloud Storage (<code>dossier-documents/{activeCandidate.id}/*</code>) and PostgreSQL records.
+              </p>
+            </div>
+
+            <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-white/10 text-xs">
+              <div className="flex justify-between py-1 border-b border-slate-200/60 dark:border-white/5">
+                <span className="text-slate-500">Legal Full Name:</span>
+                <strong className="text-slate-800 dark:text-slate-200">{activeCandidate.name}</strong>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200/60 dark:border-white/5">
+                <span className="text-slate-500">Registered Email:</span>
+                <span className="font-mono text-slate-800 dark:text-slate-200">{activeCandidate.email}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200/60 dark:border-white/5">
+                <span className="text-slate-500">Passport Number:</span>
+                <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{activeCandidate.passportNumber}</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-slate-500">Storage Files in Vault:</span>
+                <span className="font-bold text-amber-600 dark:text-amber-400">{activeCandidate.documents.length} files will be deleted</span>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                Type <span className="font-mono text-red-600 font-extrabold">DELETE</span> or passport number <span className="font-mono text-red-600 font-extrabold">{activeCandidate.passportNumber}</span> to confirm:
+              </label>
+              <input
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder={`Type DELETE or ${activeCandidate.passportNumber}`}
+                className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-red-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-white/10">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPermanentDeleteModalOpen(false);
+                  setDeleteConfirmText('');
+                }}
+                disabled={isDeletingPermanently}
+                className="px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPermanentDelete}
+                disabled={!isDeleteConfirmed || isDeletingPermanently}
+                className="px-4 py-2 text-xs font-bold rounded-xl bg-red-600 hover:bg-red-700 text-white disabled:opacity-40 disabled:cursor-not-allowed shadow-sm flex items-center gap-1.5 transition-colors"
+              >
+                {isDeletingPermanently ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Purging Records...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Confirm Permanent Deletion</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
