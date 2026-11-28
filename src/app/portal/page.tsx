@@ -43,7 +43,7 @@ import {
 export default function CandidatePortalPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const { candidates, reuploadDocument } = usePortalStore();
+  const { candidates, reuploadDocument, uploadCoreDocument, submitServiceFeeReceipt } = usePortalStore();
   const { t } = useLanguage();
   const { showToast } = useToast();
 
@@ -110,7 +110,9 @@ export default function CandidatePortalPage() {
                   <div className="flex justify-between text-xs font-bold"><span>Dossier &amp; Biometric Readiness</span><span>{calculateCandidateReadiness(candidate)}%</span></div>
                   <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"><div className="h-full bg-emerald-600" style={{ width: `${calculateCandidateReadiness(candidate)}%` }} /></div>
                 </div>
-                <button onClick={() => setShowOnboarding(true)} className="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold dark:border-slate-600">Mandatory Onboarding</button>
+                <button onClick={() => setShowOnboarding(true)} className="rounded-md border border-slate-300 px-3.5 py-2 text-xs font-bold dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5 shrink-0">
+                  <span>✏️ Edit KYC &amp; Documents</span>
+                </button>
               </div>
               <SeasonalAgriPortal candidate={candidate} onOpenOnboarding={() => setShowOnboarding(true)} />
             </>
@@ -147,7 +149,7 @@ export default function CandidatePortalPage() {
     fileInputRef.current?.click();
   };
 
-  const handleFileReuploadChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileReuploadChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !targetReuploadDocId) return;
 
@@ -156,14 +158,33 @@ export default function CandidatePortalPage() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataUrl = ev.target?.result as string;
-      reuploadDocument(candidate.id, targetReuploadDocId, dataUrl, file.name, file.type);
-      showToast(`Uploaded new scan for document. Sent to caseworker.`, 'success');
+    const targetDoc = candidate.documents.find((d) => d.id === targetReuploadDocId);
+    const docName = targetDoc?.title || targetDoc?.name || 'Document';
+    try {
+      if (targetDoc?.category === 'subscription_receipt') {
+        await submitServiceFeeReceipt(candidate.id, file, {
+          amount: '€45.00',
+          method: 'Bank Transfer / Remittance',
+          transactionId: `TX-${Date.now().toString().slice(-6)}`,
+          paymentDate: new Date().toISOString().slice(0, 10),
+          remarks: 'Service fee receipt upload',
+        });
+      } else {
+        await uploadCoreDocument(candidate.id, docName, targetDoc?.category || 'General', file, targetReuploadDocId);
+      }
+      showToast(`Uploaded new file for "${docName}". Caseworker notified.`, 'success');
+    } catch {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const dataUrl = ev.target?.result as string;
+        reuploadDocument(candidate.id, targetReuploadDocId, dataUrl, file.name, file.type);
+        showToast(`Uploaded new file for "${docName}". Caseworker notified.`, 'success');
+      };
+      reader.readAsDataURL(file);
+    } finally {
       setTargetReuploadDocId(null);
-    };
-    reader.readAsDataURL(file);
+      e.target.value = '';
+    }
   };
 
   // Documents requiring candidate signature
@@ -187,7 +208,9 @@ export default function CandidatePortalPage() {
             <div className="flex justify-between text-xs font-bold text-slate-700 dark:text-slate-200"><span>Dossier &amp; Biometric Readiness</span><span>{calculateCandidateReadiness(candidate)}%</span></div>
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"><div className="h-full bg-emerald-600 transition-all" style={{ width: `${calculateCandidateReadiness(candidate)}%` }} /></div>
           </div>
-          <button onClick={() => setShowOnboarding(true)} className="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 dark:border-slate-600 dark:text-slate-200">Mandatory Onboarding</button>
+          <button onClick={() => setShowOnboarding(true)} className="rounded-md border border-slate-300 px-3.5 py-2 text-xs font-bold text-slate-700 dark:border-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5 shrink-0">
+            <span>✏️ Edit KYC &amp; Documents</span>
+          </button>
         </div>
         {/* Stepper */}
         <Stepper candidate={candidate} />
@@ -322,28 +345,37 @@ export default function CandidatePortalPage() {
               </div>
             </div>
 
-            {/* Quick Passport & Copy Box */}
-            <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700">
-              <div className="text-right">
-                <span className="text-[10px] uppercase font-bold text-slate-400 block">Passport Number</span>
-                <span className="font-mono font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200">
-                  {maskPassport ? `••••${candidate.passportNumber.slice(-4)}` : candidate.passportNumber}
-                </span>
+            <div className="flex items-center gap-3 flex-wrap">
+              <button
+                onClick={() => setShowOnboarding(true)}
+                className="px-3.5 py-2 text-xs font-bold rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white shadow-sm flex items-center gap-1.5 transition-colors shrink-0"
+              >
+                <span>✏️ Edit KYC &amp; Documents</span>
+              </button>
+
+              {/* Quick Passport & Copy Box */}
+              <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="text-right">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Passport Number</span>
+                  <span className="font-mono font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200">
+                    {maskPassport ? `••••${candidate.passportNumber.slice(-4)}` : candidate.passportNumber}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setMaskPassport(!maskPassport)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded transition-colors"
+                  title={maskPassport ? 'Show Passport' : 'Mask Passport'}
+                >
+                  {maskPassport ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                </button>
+                <button
+                  onClick={() => copyToClipboard(candidate.passportNumber, 'Passport Number')}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded transition-colors"
+                  title="Copy Passport"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
               </div>
-              <button
-                onClick={() => setMaskPassport(!maskPassport)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded transition-colors"
-                title={maskPassport ? 'Show Passport' : 'Mask Passport'}
-              >
-                {maskPassport ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-              </button>
-              <button
-                onClick={() => copyToClipboard(candidate.passportNumber, 'Passport Number')}
-                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded transition-colors"
-                title="Copy Passport"
-              >
-                <Copy className="w-4 h-4" />
-              </button>
             </div>
           </div>
         </div>
@@ -547,36 +579,45 @@ export default function CandidatePortalPage() {
 
                     {/* Rejection Note Callout */}
                     {isRejected && doc.rejectionReason && (
-                      <div className="mt-2 p-2 rounded bg-red-100/70 dark:bg-red-950/50 text-[11px] text-red-900 dark:text-red-200">
+                      <div className="mt-2 p-2 rounded bg-red-100/70 dark:bg-red-950/50 text-[11px] font-semibold text-red-900 dark:text-red-200 border border-red-200 dark:border-red-800">
                         <strong>Caseworker Note:</strong> {doc.rejectionReason}
                       </div>
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-slate-200 dark:border-slate-700/60">
+                  <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700/60 space-y-2">
                     {isRejected ? (
                       <button
                         onClick={() => triggerReupload(doc.id)}
-                        className="col-span-2 py-1.5 px-3 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                        className="w-full py-1.5 px-3 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors flex items-center justify-center gap-1.5 shadow-sm"
                       >
                         <Upload className="w-3.5 h-3.5" />
-                        <span>Re-upload New File</span>
+                        <span>🔄 Re-upload Corrected File</span>
                       </button>
                     ) : (
                       <>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={() => setActiveDocForPreview(doc)}
+                            className="py-1.5 px-3 text-xs font-semibold rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-brand-primary transition-colors flex items-center justify-center gap-1.5"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>{t('preview')}</span>
+                          </button>
+                          <button
+                            onClick={() => handleQuickDownloadDoc(doc)}
+                            className="py-1.5 px-3 text-xs font-semibold rounded-lg bg-brand-primary hover:bg-brand-secondary text-white transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>PDF</span>
+                          </button>
+                        </div>
                         <button
-                          onClick={() => setActiveDocForPreview(doc)}
-                          className="py-1.5 px-3 text-xs font-semibold rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-brand-primary transition-colors flex items-center justify-center gap-1.5"
+                          onClick={() => triggerReupload(doc.id)}
+                          className="w-full py-1.5 px-3 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition-colors flex items-center justify-center gap-1.5"
                         >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>{t('preview')}</span>
-                        </button>
-                        <button
-                          onClick={() => handleQuickDownloadDoc(doc)}
-                          className="py-1.5 px-3 text-xs font-semibold rounded-lg bg-brand-primary hover:bg-brand-secondary text-white transition-colors flex items-center justify-center gap-1.5 shadow-sm"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>PDF</span>
+                          <Upload className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                          <span>🔄 Replace File</span>
                         </button>
                       </>
                     )}

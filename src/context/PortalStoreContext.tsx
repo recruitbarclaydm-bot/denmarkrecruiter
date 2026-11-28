@@ -532,7 +532,7 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (uploadError) throw uploadError;
 
     const { error: profileError } = await supabase.from('candidates')
-      .update({ avatar_url: storagePath })
+      .update({ avatar_url: storagePath, kyc_status: 'submitted' })
       .eq('id', candidateId);
     if (profileError) {
       await supabase.storage.from('dossier-documents').remove([storagePath]);
@@ -544,8 +544,8 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const { error: auditError } = await supabase.from('audit_logs').insert({
       candidate_id: candidateId,
       actor: `${actor} (Applicant)`,
-      action: 'Biometric Avatar Uploaded',
-      details: 'Candidate uploaded a passport-style profile photo.',
+      action: 'Candidate Updated KYC / Profile Photo',
+      details: 'Candidate uploaded / replaced their biometric profile photo.',
     });
     if (auditError) throw auditError;
 
@@ -555,17 +555,19 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
           ...item,
           avatarStoragePath: storagePath,
           avatarUrl: signedUrl,
+          kycStatus: 'submitted' as KycStatus,
           auditLog: [{
             id: `avatar_${Date.now()}`,
             timestamp: new Date().toISOString(),
             actor: `${actor} (Applicant)`,
-            action: 'Biometric Avatar Uploaded',
-            details: 'Candidate uploaded a passport-style profile photo.',
+            action: 'Candidate Updated KYC / Profile Photo',
+            details: 'Candidate uploaded / replaced their biometric profile photo.',
           }, ...item.auditLog],
         }
       : item);
     candidatesRef.current = updated;
     setCandidates(updated);
+    await refreshStore();
   };
 
   const uploadCoreDocument = async (
@@ -592,6 +594,17 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const existing = candidate?.documents.find((document) => document.id === existingDocumentId) || candidate?.documents.find((document) =>
       document.title.toLowerCase() === name.toLowerCase() || document.category?.toLowerCase() === category.toLowerCase()
     );
+
+    let targetDocId = existing?.id;
+    if (!targetDocId || !/^[0-9a-f-]{36}$/i.test(targetDocId)) {
+      const { data: foundRow } = await supabase.from('dossier_documents')
+        .select('id')
+        .eq('candidate_id', candidateId)
+        .or(`name.ilike."${name}",category.ilike."${category}"`)
+        .maybeSingle();
+      if (foundRow?.id) targetDocId = foundRow.id;
+    }
+
     const row = {
       candidate_id: candidateId,
       name,
@@ -604,8 +617,8 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
       signature_data: null,
       uploaded_at: new Date().toISOString(),
     };
-    const documentResult = existing && /^[0-9a-f-]{36}$/i.test(existing.id)
-      ? await supabase.from('dossier_documents').update(row).eq('id', existing.id)
+    const documentResult = targetDocId && /^[0-9a-f-]{36}$/i.test(targetDocId)
+      ? await supabase.from('dossier_documents').update(row).eq('id', targetDocId)
       : await supabase.from('dossier_documents').insert(row);
     if (documentResult.error) {
       await supabase.storage.from('dossier-documents').remove([storagePath]);
@@ -615,8 +628,8 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const { error: auditError } = await supabase.from('audit_logs').insert({
       candidate_id: candidateId,
       actor: `${candidate?.name || 'Candidate'} (Applicant)`,
-      action: 'Core Document Uploaded',
-      details: `Uploaded ${name} (${file.name}) for caseworker review.`,
+      action: `Candidate Uploaded / Replaced Document: ${name}`,
+      details: `Candidate uploaded / replaced ${name} (${file.name}) for caseworker review.`,
     });
     if (auditError) throw auditError;
     await refreshStore();
@@ -682,6 +695,15 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (uploadError) throw uploadError;
 
     const existing = candidate.documents.find((document) => document.category === 'subscription_receipt');
+    let targetDocId = existing?.id;
+    if (!targetDocId || !/^[0-9a-f-]{36}$/i.test(targetDocId)) {
+      const { data: foundRow } = await supabase.from('dossier_documents')
+        .select('id')
+        .eq('candidate_id', candidateId)
+        .eq('category', 'subscription_receipt')
+        .maybeSingle();
+      if (foundRow?.id) targetDocId = foundRow.id;
+    }
     const documentRow = {
       candidate_id: candidateId,
       name: 'Service Fee Payment Receipt',
@@ -694,8 +716,8 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
       signature_data: JSON.stringify(transaction),
       uploaded_at: new Date().toISOString(),
     };
-    const documentResult = existing && /^[0-9a-f-]{36}$/i.test(existing.id)
-      ? await supabase.from('dossier_documents').update(documentRow).eq('id', existing.id)
+    const documentResult = targetDocId && /^[0-9a-f-]{36}$/i.test(targetDocId)
+      ? await supabase.from('dossier_documents').update(documentRow).eq('id', targetDocId)
       : await supabase.from('dossier_documents').insert(documentRow);
     if (documentResult.error) {
       await supabase.storage.from('dossier-documents').remove([storagePath]);
@@ -716,7 +738,7 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const { error: auditError } = await supabase.from('audit_logs').insert({
       candidate_id: candidateId,
       actor: `${candidate.name} (Applicant)`,
-      action: 'Service Fee Receipt Submitted',
+      action: 'Candidate Uploaded / Replaced Document: Service Fee Payment Receipt',
       details: `Receipt uploaded: ${transaction.amount} by ${transaction.method}; reference ${transaction.transactionId}.`,
     });
     if (auditError) throw auditError;
@@ -1157,7 +1179,7 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
         const log = createAuditEntry(
           `${c.name} (Applicant)`,
-          'Document Re-uploaded',
+          `Candidate Uploaded / Replaced Document: ${docTitle}`,
           `Uploaded revised file for "${docTitle}" (${fileName})`
         );
 
@@ -1349,8 +1371,8 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
           'info'
         );
         const log = createAuditEntry(
-          `${c.name} (Applicant)`,
-          'KYC Dossier Updated',
+          `${data.name || c.name} (Applicant)`,
+          'Candidate Updated KYC / Profile Photo',
           'Applicant updated personal identity and biometric data.'
         );
         return {

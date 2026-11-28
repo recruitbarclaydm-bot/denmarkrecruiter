@@ -6,7 +6,7 @@ import { usePortalStore } from '@/context/PortalStoreContext';
 import { useToast } from '@/context/ToastContext';
 import { getSignedDocumentUrl } from '@/lib/supabase';
 import { DocumentSigningModal } from '@/components/portal/DocumentSigningModal';
-import { CheckCircle2, Clock3, FileText, ImagePlus, LockKeyhole, ShieldCheck, Upload } from 'lucide-react';
+import { CheckCircle2, Clock3, FileText, ImagePlus, LockKeyhole, ShieldCheck, Upload, AlertCircle } from 'lucide-react';
 
 interface MandatoryOnboardingWizardProps {
   candidate: CandidateRecord;
@@ -97,6 +97,13 @@ const documentSlots = [
     aliases: ['medical', 'fitness certificate'],
     required: false,
   },
+  {
+    id: 'subscription_receipt',
+    name: 'Service Fee Payment Receipt',
+    category: 'subscription_receipt',
+    aliases: ['receipt', 'service fee', 'subscription'],
+    required: false,
+  },
 ];
 
 const matchesSlot = (document: DocumentRecord, slot: (typeof documentSlots)[number]) => {
@@ -160,7 +167,7 @@ const selectFields: { key: keyof KycFormValues; label: string; options: string[]
 const fieldClass = 'w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-xs text-slate-900 dark:text-slate-100 disabled:bg-slate-100 dark:disabled:bg-slate-900';
 
 export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps> = ({ candidate, onViewTracker }) => {
-  const { uploadCandidateAvatar, uploadCoreDocument, updateCandidateKyc, refreshStore } = usePortalStore();
+  const { uploadCandidateAvatar, uploadCoreDocument, submitServiceFeeReceipt, updateCandidateKyc, refreshStore } = usePortalStore();
   const { showToast } = useToast();
   const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1);
   const [form, setForm] = useState<KycFormValues>(() => getFormValues(candidate));
@@ -168,10 +175,16 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [targetSlotId, setTargetSlotId] = useState<string | null>(null);
   const [docForSigning, setDocForSigning] = useState<DocumentRecord | null>(null);
+  const [isEditingKyc, setIsEditingKyc] = useState<boolean>(
+    candidate.kycStatus === 'pending' || candidate.kycStatus === 'rejected'
+  );
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const documentInputRef = useRef<HTMLInputElement | null>(null);
-  const canEditKyc = candidate.kycStatus === 'pending' || candidate.kycStatus === 'rejected';
-  const kycSubmitted = candidate.kycStatus === 'submitted' || candidate.kycStatus === 'verified';
+
+  const canEditKyc = isEditingKyc || candidate.kycStatus === 'pending' || candidate.kycStatus === 'rejected';
+  const kycSubmitted = candidate.kycStatus === 'submitted';
+  const kycVerified = candidate.kycStatus === 'verified';
+  const kycRejected = candidate.kycStatus === 'rejected';
 
   useEffect(() => {
     setForm(getFormValues(candidate));
@@ -189,7 +202,7 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
     setIsUploadingAvatar(true);
     try {
       await uploadCandidateAvatar(candidate.id, file);
-      showToast('Biometric profile photo uploaded.', 'success');
+      showToast('Biometric profile photo uploaded & submitted for review.', 'success');
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Unable to upload profile photo.', 'error');
     } finally {
@@ -204,7 +217,17 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
     if (!file || !slot) return;
     const existing = getSlotDocument(slot);
     try {
-      await uploadCoreDocument(candidate.id, slot.name, slot.category, file, existing?.id);
+      if (slot.id === 'subscription_receipt') {
+        await submitServiceFeeReceipt(candidate.id, file, {
+          amount: '€45.00',
+          method: 'Bank Transfer / Remittance',
+          transactionId: `TX-${Date.now().toString().slice(-6)}`,
+          paymentDate: new Date().toISOString().slice(0, 10),
+          remarks: 'Service fee receipt upload',
+        });
+      } else {
+        await uploadCoreDocument(candidate.id, slot.name, slot.category, file, existing?.id);
+      }
       showToast(`${slot.name} uploaded for caseworker audit.`, 'success');
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Unable to upload document.', 'error');
@@ -255,7 +278,13 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
         },
         workExperienceSummary: form.work_skills_summary.trim(),
       });
-      showToast('KYC submitted and locked for SIRI Caseworker Audit.', 'success');
+      setIsEditingKyc(false);
+      showToast(
+        kycRejected
+          ? 'Corrected KYC submitted for caseworker audit.'
+          : 'Updated KYC submitted for caseworker audit.',
+        'success'
+      );
     } catch (error) {
       await refreshStore();
       showToast(error instanceof Error ? error.message : 'Unable to submit KYC.', 'error');
@@ -324,13 +353,61 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
               <button
                 type="button"
                 onClick={() => avatarInputRef.current?.click()}
-                disabled={isUploadingAvatar || !canEditKyc}
-                className="flex w-full items-center justify-center gap-2 rounded-md bg-emerald-700 px-3 py-2.5 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-50"
+                disabled={isUploadingAvatar}
+                className="flex w-full items-center justify-center gap-2 rounded-md bg-emerald-700 px-3 py-2.5 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-50 shadow-sm"
               >
-                <Upload className="h-4 w-4" /> {isUploadingAvatar ? 'Uploading photo...' : candidate.avatarStoragePath ? 'Replace Biometric Photo' : 'Upload Biometric Photo'}
+                <Upload className="h-4 w-4" /> {isUploadingAvatar ? 'Uploading photo...' : candidate.avatarStoragePath ? '🔄 Replace Biometric Photo' : 'Upload Biometric Photo'}
               </button>
-              {kycSubmitted && <div className="flex items-center gap-2 rounded-md bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"><LockKeyhole className="h-4 w-4" /> Under SIRI Caseworker Audit</div>}
-              {candidate.kycStatus === 'rejected' && candidate.kycNote && <div className="rounded-md border border-red-300 bg-red-50 p-3 text-xs text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200"><strong>Correction required:</strong> {candidate.kycNote}</div>}
+
+              {kycVerified && (
+                <div className="rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 p-3 text-xs text-emerald-800 dark:text-emerald-300 space-y-2">
+                  <div className="flex items-center gap-2 font-bold">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>Identity KYC Verified &amp; Approved</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                    Your identity records are verified. You can update your details anytime if corrections are required.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingKyc(!isEditingKyc)}
+                    className="w-full inline-flex items-center justify-center gap-1.5 rounded-md border border-emerald-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-slate-800"
+                  >
+                    {isEditingKyc ? 'Cancel Editing' : '✏️ Edit & Update KYC Details'}
+                  </button>
+                </div>
+              )}
+
+              {kycSubmitted && (
+                <div className="rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-300 space-y-2">
+                  <div className="flex items-center gap-2 font-bold">
+                    <Clock3 className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <span>Under Caseworker Audit</span>
+                  </div>
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                    Your KYC submission is currently being reviewed by your caseworker.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingKyc(!isEditingKyc)}
+                    className="w-full inline-flex items-center justify-center gap-1.5 rounded-md border border-amber-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-slate-800"
+                  >
+                    {isEditingKyc ? 'Cancel Editing' : '✏️ Edit & Update KYC Details'}
+                  </button>
+                </div>
+              )}
+
+              {kycRejected && (
+                <div className="rounded-md border border-red-300 bg-red-50 p-3 text-xs text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200 space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                    <span>KYC Requires Correction</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed">
+                    <strong>Caseworker Note:</strong> {candidate.kycNote || 'Please correct your details and re-submit.'}
+                  </p>
+                </div>
+              )}
             </div>
 
             <form onSubmit={handleKycSubmit} className="space-y-4">
@@ -375,12 +452,46 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
                   />
                 </label>
               </div>
+
               {canEditKyc ? (
-                <button type="submit" disabled={isSubmitting || !candidate.avatarStoragePath} className="rounded-md bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-50">
-                  {isSubmitting ? 'Submitting KYC...' : 'Submit Full KYC for Review'}
-                </button>
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !candidate.avatarStoragePath}
+                    className="rounded-md bg-emerald-700 px-5 py-2.5 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-50 shadow-sm"
+                  >
+                    {isSubmitting
+                      ? 'Submitting KYC...'
+                      : kycRejected
+                      ? 'Fix & Re-submit KYC'
+                      : kycVerified || kycSubmitted
+                      ? 'Save & Submit Updated KYC'
+                      : 'Submit Full KYC for Review'}
+                  </button>
+                  {(kycVerified || kycSubmitted) && isEditingKyc && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingKyc(false)}
+                      className="rounded-md border border-slate-300 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
               ) : (
-                <div className="flex items-center gap-2 rounded-md bg-slate-100 p-3 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300"><LockKeyhole className="h-4 w-4" /> KYC details are read-only while under caseworker audit.</div>
+                <div className="flex items-center justify-between gap-3 rounded-md bg-slate-100 p-3 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  <div className="flex items-center gap-2">
+                    <LockKeyhole className="h-4 w-4 text-slate-500" />
+                    <span>KYC details are currently locked. Click below to unlock and edit.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingKyc(true)}
+                    className="rounded bg-white dark:bg-slate-700 px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-600 shadow-sm hover:bg-slate-50"
+                  >
+                    ✏️ Edit KYC
+                  </button>
+                </div>
               )}
             </form>
           </div>
@@ -389,39 +500,125 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
         {activeStep === 2 && (
           <div className="space-y-3 pt-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div><h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Mandatory SIRI Dossier Document Checklist</h2><p className="mt-1 text-xs text-slate-500">Upload an official PDF or JPG/PNG scan. Seeded text records do not count as uploaded files.</p></div>
-              <a href="https://europa.eu/europass/en/create-europass-cv" target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-700 underline dark:text-blue-300">Create a Europass CV</a>
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  Mandatory SIRI Dossier Document Checklist
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  Upload an official PDF or JPG/PNG scan. Seeded text records do not count as uploaded files. You can replace or re-upload files at any time.
+                </p>
+              </div>
+              <a
+                href="https://europa.eu/europass/en/create-europass-cv"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs font-semibold text-blue-700 underline dark:text-blue-300"
+              >
+                Create a Europass CV
+              </a>
             </div>
+
+            {/* Hidden file input for document uploads */}
+            <input
+              ref={documentInputRef}
+              type="file"
+              accept="application/pdf,image/jpeg,image/png"
+              className="hidden"
+              onChange={handleDocumentChange}
+            />
+
             {documentSlots.map((slot) => {
               const document = getSlotDocument(slot);
               const hasBinary = Boolean(document?.storagePath);
               const isRejected = document?.status === 'rejected';
               const isVerified = document?.status === 'verified' && hasBinary;
-              const label = isRejected ? 'Rejected - Re-upload Required' : isVerified ? 'Verified' : hasBinary ? 'Pending Caseworker Audit' : 'Missing / Action Required';
+              const label = isRejected
+                ? 'Rejected - Correction Required'
+                : isVerified
+                ? 'Verified'
+                : hasBinary
+                ? 'Pending Caseworker Audit'
+                : 'Missing / Action Required';
+
               return (
-                <div key={slot.id} className="grid grid-cols-1 sm:grid-cols-[1fr_auto] items-center gap-3 rounded-md border border-slate-200 p-3 dark:border-slate-700">
+                <div
+                  key={slot.id}
+                  className={`grid grid-cols-1 sm:grid-cols-[1fr_auto] items-center gap-3 rounded-md border p-3.5 transition-colors ${
+                    isRejected
+                      ? 'border-red-300 bg-red-50/40 dark:border-red-800 dark:bg-red-950/20'
+                      : 'border-slate-200 dark:border-slate-700'
+                  }`}
+                >
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-slate-100"><FileText className="h-4 w-4 shrink-0 text-emerald-700" />{slot.name}{slot.required ? ' *' : ' (Optional / stage-dependent)'}</div>
-                    <div className={`mt-1 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-bold ${isRejected ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200' : isVerified ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' : hasBinary ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
-                      {isVerified ? <CheckCircle2 className="h-3 w-3" /> : hasBinary ? <Clock3 className="h-3 w-3" /> : null}{label}
+                    <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-slate-100">
+                      <FileText className="h-4 w-4 shrink-0 text-emerald-700" />
+                      {slot.name}
+                      {slot.required ? ' *' : ' (Optional / stage-dependent)'}
                     </div>
-                    {isRejected && document?.rejectionReason && <p className="mt-1 text-[11px] text-red-700 dark:text-red-300">Caseworker note: {document.rejectionReason}</p>}
-                    {hasBinary && <p className="mt-1 truncate text-[10px] text-slate-500">{document?.filename}</p>}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {hasBinary && document && <button type="button" onClick={() => void previewDocument(document)} className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">Preview Document</button>}
-                    {!isVerified && (
-                      <>
-                        <input ref={documentInputRef} type="file" accept="application/pdf,image/jpeg,image/png" className="hidden" onChange={handleDocumentChange} />
-                        <button
-                          type="button"
-                          onClick={() => { setTargetSlotId(slot.id); documentInputRef.current?.click(); }}
-                          className="inline-flex items-center gap-1.5 rounded-md bg-emerald-700 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-800"
-                        >
-                          <Upload className="h-3.5 w-3.5" />{isRejected ? 'Re-upload Corrected File' : hasBinary ? 'Replace File' : 'Upload Official Scan (PDF/JPG)'}
-                        </button>
-                      </>
+                    <div
+                      className={`mt-1 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-bold ${
+                        isRejected
+                          ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200'
+                          : isVerified
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+                          : hasBinary
+                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
+                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                      }`}
+                    >
+                      {isVerified ? (
+                        <CheckCircle2 className="h-3 w-3" />
+                      ) : hasBinary ? (
+                        <Clock3 className="h-3 w-3" />
+                      ) : isRejected ? (
+                        <AlertCircle className="h-3 w-3" />
+                      ) : null}
+                      {label}
+                    </div>
+
+                    {isRejected && document?.rejectionReason && (
+                      <div className="mt-2 rounded bg-red-100/70 p-2 text-[11px] font-semibold text-red-900 dark:bg-red-950/60 dark:text-red-200 border border-red-200 dark:border-red-800">
+                        <strong>Caseworker Note:</strong> {document.rejectionReason}
+                      </div>
                     )}
+
+                    {hasBinary && (
+                      <p className="mt-1.5 truncate text-[10px] text-slate-500">
+                        {document?.filename || document?.name}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {hasBinary && document && (
+                      <button
+                        type="button"
+                        onClick={() => void previewDocument(document)}
+                        className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                      >
+                        👁️ Preview
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTargetSlotId(slot.id);
+                        documentInputRef.current?.click();
+                      }}
+                      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-bold text-white shadow-sm transition-colors ${
+                        isRejected
+                          ? 'bg-red-600 hover:bg-red-700'
+                          : 'bg-emerald-700 hover:bg-emerald-800'
+                      }`}
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      {isRejected
+                        ? '🔄 Re-upload Corrected File'
+                        : hasBinary
+                        ? '🔄 Replace / Update File'
+                        : 'Upload Official Scan (PDF/JPG)'}
+                    </button>
                   </div>
                 </div>
               );
@@ -431,7 +628,10 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
 
         {activeStep === 3 && (
           <div className="space-y-3 pt-4">
-            <div><h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Dispatched Contracts &amp; E-Signatures</h2><p className="mt-1 text-xs text-slate-500">Review caseworker-dispatched documents and submit requested signatures.</p></div>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Dispatched Contracts &amp; E-Signatures</h2>
+              <p className="mt-1 text-xs text-slate-500">Review caseworker-dispatched documents and submit requested signatures.</p>
+            </div>
             {dispatchedDocs.length === 0 ? (
               <div className="rounded-md border border-dashed border-slate-300 p-6 text-center text-xs text-slate-500 dark:border-slate-700">No contracts or documents have been dispatched to your dossier.</div>
             ) : dispatchedDocs.map((document) => (
