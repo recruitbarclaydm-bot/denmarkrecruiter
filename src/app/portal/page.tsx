@@ -42,20 +42,107 @@ import {
   Calendar,
   MapPin,
   HelpCircle,
-  CheckCheck,
-  User,
   FolderOpen,
-  Video,
+  Mail,
+  Phone,
+  Trash2,
+  Check,
 } from 'lucide-react';
+
+const COUNTRY_DIAL_CODES = [
+  { code: '+977', country: 'Nepal', flag: '🇳🇵' },
+  { code: '+45', country: 'Denmark', flag: '🇩🇰' },
+  { code: '+91', country: 'India', flag: '🇮🇳' },
+  { code: '+971', country: 'United Arab Emirates', flag: '🇦🇪' },
+  { code: '+974', country: 'Qatar', flag: '🇶🇦' },
+  { code: '+966', country: 'Saudi Arabia', flag: '🇸🇦' },
+  { code: '+965', country: 'Kuwait', flag: '🇰🇼' },
+  { code: '+968', country: 'Oman', flag: '🇴🇲' },
+  { code: '+973', country: 'Bahrain', flag: '🇧🇭' },
+  { code: '+60', country: 'Malaysia', flag: '🇲🇾' },
+  { code: '+44', country: 'United Kingdom', flag: '🇬🇧' },
+  { code: '+1', country: 'United States / Canada', flag: '🇺🇸' },
+  { code: '+61', country: 'Australia', flag: '🇦🇺' },
+  { code: '+81', country: 'Japan', flag: '🇯🇵' },
+  { code: '+82', country: 'South Korea', flag: '🇰🇷' },
+  { code: '+49', country: 'Germany', flag: '🇩🇪' },
+  { code: '+33', country: 'France', flag: '🇫🇷' },
+  { code: '+39', country: 'Italy', flag: '🇮🇹' },
+  { code: '+34', country: 'Spain', flag: '🇪🇸' },
+  { code: '+31', country: 'Netherlands', flag: '🇳🇱' },
+  { code: '+46', country: 'Sweden', flag: '🇸🇪' },
+  { code: '+47', country: 'Norway', flag: '🇳🇴' },
+  { code: '+358', country: 'Finland', flag: '🇫🇮' },
+  { code: '+48', country: 'Poland', flag: '🇵🇱' },
+  { code: '+351', country: 'Portugal', flag: '🇵🇹' },
+  { code: '+64', country: 'New Zealand', flag: '🇳🇿' },
+  { code: '+65', country: 'Singapore', flag: '🇸🇬' },
+  { code: '+66', country: 'Thailand', flag: '🇹🇭' },
+  { code: '+880', country: 'Bangladesh', flag: '🇧🇩' },
+  { code: '+94', country: 'Sri Lanka', flag: '🇱🇰' },
+  { code: '+92', country: 'Pakistan', flag: '🇵🇰' },
+  { code: '+63', country: 'Philippines', flag: '🇵🇭' },
+  { code: '+84', country: 'Vietnam', flag: '🇻🇳' },
+  { code: '+86', country: 'China', flag: '🇨🇳' },
+  { code: '+27', country: 'South Africa', flag: '🇿🇦' },
+  { code: '+234', country: 'Nigeria', flag: '🇳🇬' },
+  { code: '+254', country: 'Kenya', flag: '🇰🇪' },
+  { code: '+20', country: 'Egypt', flag: '🇪🇬' },
+  { code: '+55', country: 'Brazil', flag: '🇧🇷' },
+  { code: '+52', country: 'Mexico', flag: '🇲🇽' },
+  { code: '+41', country: 'Switzerland', flag: '🇨🇭' },
+  { code: '+43', country: 'Austria', flag: '🇦🇹' },
+  { code: '+32', country: 'Belgium', flag: '🇧🇪' },
+  { code: '+353', country: 'Ireland', flag: '🇮🇪' },
+  { code: '+30', country: 'Greece', flag: '🇬🇷' },
+  { code: '+420', country: 'Czech Republic', flag: '🇨🇿' },
+  { code: '+36', country: 'Hungary', flag: '🇭🇺' },
+  { code: '+40', country: 'Romania', flag: '🇷🇴' },
+  { code: '+380', country: 'Ukraine', flag: '🇺🇦' },
+  { code: '+90', country: 'Turkey', flag: '🇹🇷' },
+  { code: '+972', country: 'Israel', flag: '🇮🇱' },
+  { code: '+961', country: 'Lebanon', flag: '🇱🇧' },
+  { code: '+962', country: 'Jordan', flag: '🇯🇴' },
+];
+
+const formatToDateInput = (val?: string): string => {
+  if (!val) return '';
+  const trimmed = val.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return '';
+};
+
+const extractPhoneParts = (fullPhone?: string): { dialCode: string; number: string } => {
+  if (!fullPhone) return { dialCode: '+977', number: '' };
+  const clean = fullPhone.trim();
+  for (const c of COUNTRY_DIAL_CODES) {
+    if (clean.startsWith(c.code)) {
+      const rest = clean.slice(c.code.length).replace(/^[- ]+/, '');
+      return { dialCode: c.code, number: rest };
+    }
+  }
+  return { dialCode: '+977', number: clean };
+};
 
 interface KycFormValues extends NepalKycDetails {
   full_name: string;
+  email: string;
   dob: string;
   nationality: string;
-  address: string;
+  dial_code: string;
+  phone_number: string;
   phone: string;
+  address: string;
   passport_number: string;
   passport_expiry: string;
+  signature_data_url: string;
 }
 
 const emptyExtendedKyc: NepalKycDetails = {
@@ -76,18 +163,26 @@ const emptyExtendedKyc: NepalKycDetails = {
   previous_schengen_visa: '',
 };
 
-const getFormValues = (candidate: CandidateRecord): KycFormValues => ({
-  full_name: candidate.name || '',
-  dob: candidate.dob || '',
-  nationality: candidate.nationality || '',
-  address: candidate.permanentAddress || '',
-  phone: candidate.phone || '',
-  passport_number: candidate.passportNumber || '',
-  passport_expiry: candidate.passportExpiry || '',
-  ...emptyExtendedKyc,
-  ...candidate.extendedKyc,
-  work_skills_summary: candidate.extendedKyc?.work_skills_summary || candidate.workExperienceSummary || '',
-});
+const getFormValues = (candidate: CandidateRecord): KycFormValues => {
+  const phoneParts = extractPhoneParts(candidate.phone);
+  return {
+    full_name: candidate.name || '',
+    email: candidate.email || '',
+    dob: formatToDateInput(candidate.dob),
+    nationality: candidate.nationality || '',
+    dial_code: phoneParts.dialCode,
+    phone_number: phoneParts.number,
+    phone: candidate.phone || '',
+    address: candidate.permanentAddress || '',
+    passport_number: candidate.passportNumber || '',
+    passport_expiry: formatToDateInput(candidate.passportExpiry),
+    signature_data_url: candidate.signatureDataUrl || '',
+    ...emptyExtendedKyc,
+    ...candidate.extendedKyc,
+    passport_issue_date: formatToDateInput(candidate.extendedKyc?.passport_issue_date),
+    work_skills_summary: candidate.extendedKyc?.work_skills_summary || candidate.workExperienceSummary || '',
+  };
+};
 
 const coreDocumentSlots = [
   {
@@ -99,9 +194,9 @@ const coreDocumentSlots = [
   },
   {
     id: 'citizenship',
-    name: 'Nepalese Citizenship Certificate (Nagarikta / National ID)',
+    name: 'Nepalese Citizenship Certificate (Citizenship / National ID)',
     category: 'Core Citizenship',
-    aliases: ['citizenship', 'nagarikta', 'national id'],
+    aliases: ['citizenship', 'national id'],
     required: true,
   },
   {
@@ -149,6 +244,7 @@ export default function CandidatePortalPage() {
     updateCandidateKyc,
     sendDirectMessage,
     markMessagesAsRead,
+    saveCandidateSignature,
   } = usePortalStore();
   const { t } = useLanguage();
   const { showToast } = useToast();
@@ -175,6 +271,12 @@ export default function CandidatePortalPage() {
   const [kycForm, setKycForm] = useState<KycFormValues | null>(null);
   const [isSavingKyc, setIsSavingKyc] = useState(false);
 
+  // Signature Pad state
+  const [signatureMode, setSignatureMode] = useState<'draw' | 'upload'>('draw');
+  const [isDrawing, setIsDrawing] = useState(false);
+  const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const signatureUploadRef = useRef<HTMLInputElement | null>(null);
+
   // Messaging state
   const [messageInput, setMessageInput] = useState('');
   const [isSendingMessage, setIsSendingMessage] = useState(false);
@@ -195,9 +297,12 @@ export default function CandidatePortalPage() {
   }, [
     candidate?.id,
     candidate?.name,
+    candidate?.email,
     candidate?.dob,
+    candidate?.phone,
     candidate?.passportNumber,
     candidate?.passportExpiry,
+    candidate?.signatureDataUrl,
     candidate?.extendedKyc,
     candidate?.workExperienceSummary,
   ]);
@@ -276,6 +381,103 @@ export default function CandidatePortalPage() {
     }
   };
 
+  // Signature Pad Handlers
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    ctx.beginPath();
+    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+    setIsDrawing(true);
+  };
+
+  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+    ctx.strokeStyle = '#047857';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  };
+
+  const stopDrawing = () => {
+    if (!isDrawing) return;
+    setIsDrawing(false);
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    const dataUrl = canvas.toDataURL('image/png');
+    setKycForm((prev) => (prev ? { ...prev, signature_data_url: dataUrl } : null));
+  };
+
+  // Touch handlers for mobile/tablets
+  const startTouchDrawing = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const canvas = signatureCanvasRef.current;
+    if (!canvas || !touch) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    ctx.beginPath();
+    ctx.moveTo(touch.clientX - rect.left, touch.clientY - rect.top);
+    setIsDrawing(true);
+  };
+
+  const drawTouch = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    if (!isDrawing) return;
+    const touch = e.touches[0];
+    const canvas = signatureCanvasRef.current;
+    if (!canvas || !touch) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    ctx.lineTo(touch.clientX - rect.left, touch.clientY - rect.top);
+    ctx.strokeStyle = '#047857';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  };
+
+  const clearSignatureCanvas = () => {
+    const canvas = signatureCanvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+    setKycForm((prev) => (prev ? { ...prev, signature_data_url: '' } : null));
+  };
+
+  const handleSignatureFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const comp = await compressImageFile(file, { maxWidth: 800, maxHeight: 400, quality: 0.9 });
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const dataUrl = ev.target?.result as string;
+        setKycForm((prev) => (prev ? { ...prev, signature_data_url: dataUrl } : null));
+        showToast('Signature image uploaded and adopted.', 'success');
+      };
+      reader.readAsDataURL(comp.file);
+    } catch {
+      showToast('Unable to process signature image.', 'error');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
   // Document Vault Upload
   const triggerSlotUpload = (slotId: string) => {
     setTargetSlotId(slotId);
@@ -306,15 +508,21 @@ export default function CandidatePortalPage() {
   const handleSaveKyc = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingKyc(true);
+    const combinedPhone = `${kycForm.dial_code}-${kycForm.phone_number.trim()}`;
+    const signatureUrl = kycForm.signature_data_url || candidate.signatureDataUrl || '';
+
     try {
       await updateCandidateKyc(candidate.id, {
         name: kycForm.full_name.trim(),
+        email: kycForm.email.trim(),
         dob: kycForm.dob.trim(),
         nationality: kycForm.nationality.trim(),
         permanentAddress: kycForm.address.trim(),
-        phone: kycForm.phone.trim(),
+        phone: combinedPhone,
         passportNumber: kycForm.passport_number.trim().toUpperCase(),
         passportExpiry: kycForm.passport_expiry,
+        signatureDataUrl: signatureUrl,
+        signatureTimestamp: signatureUrl ? new Date().toISOString() : candidate.signatureTimestamp,
         extendedKyc: {
           father_name: kycForm.father_name.trim(),
           mother_name: kycForm.mother_name.trim(),
@@ -334,7 +542,12 @@ export default function CandidatePortalPage() {
         },
         workExperienceSummary: kycForm.work_skills_summary.trim(),
       });
-      showToast('KYC profile updated successfully and submitted for caseworker audit.', 'success');
+
+      if (signatureUrl && signatureUrl !== candidate.signatureDataUrl) {
+        saveCandidateSignature(candidate.id, signatureUrl);
+      }
+
+      showToast('KYC profile and digital signature updated successfully!', 'success');
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Unable to update KYC details.', 'error');
     } finally {
@@ -621,7 +834,7 @@ export default function CandidatePortalPage() {
                       </h3>
                     </div>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                      {t('siriCaseStatus')}
+                      ACTIVE CASE
                     </span>
                   </div>
                   <div className="flex items-center gap-2 my-2">
@@ -637,7 +850,6 @@ export default function CandidatePortalPage() {
                   </div>
                   <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-400 mt-3">
                     <div><strong>Scheme:</strong> {candidate.siriCaseOrder.scheme}</div>
-                    <div><strong>Statutory Fee:</strong> {candidate.siriCaseOrder.statutoryFee} (Paid & Reconciled)</div>
                     <div><strong>Registry:</strong> {candidate.siriCaseOrder.caseRegistry}</div>
                   </div>
                 </div>
@@ -761,7 +973,7 @@ export default function CandidatePortalPage() {
                   Candidate KYC Profile &amp; Biometrics
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Ensure all details match your passport and Nagarikta exactly. Edits are directly updated in the cloud registry.
+                  Ensure all details match your Passport and Citizenship certificate exactly. Edits are directly updated in the cloud registry.
                 </p>
               </div>
 
@@ -799,6 +1011,42 @@ export default function CandidatePortalPage() {
               </div>
             )}
 
+            {/* 1. DEDICATED INLINE PROFILE PHOTO UPLOADER CARD */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-full overflow-hidden bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-extrabold text-2xl flex items-center justify-center border-2 border-emerald-500/50 shadow-sm shrink-0">
+                  {candidate.avatarUrl ? (
+                    <img src={candidate.avatarUrl} alt={`${candidate.name} biometric profile`} className="h-full w-full object-cover" />
+                  ) : (
+                    candidate.name.split(' ').map((n) => n[0]).join('')
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <span>Biometric Profile Photo</span>
+                    {candidate.avatarUrl && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                        Uploaded
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1 max-w-md leading-relaxed">
+                    High-resolution passport-style photo. White background preferred. Supported formats: JPG, PNG, WebP up to 5MB. Files are automatically optimized.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => avatarFileRef.current?.click()}
+                disabled={isUploadingAvatar}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-2 transition-all shrink-0 disabled:opacity-50"
+              >
+                <Camera className="w-4 h-4" />
+                <span>{isUploadingAvatar ? 'Optimizing & Uploading...' : '📷 Upload / Change Profile Photo'}</span>
+              </button>
+            </div>
+
             {/* Full Editable Form */}
             <form onSubmit={handleSaveKyc} className="space-y-6">
               {/* Group 1: Personal & Primary Identity */}
@@ -817,17 +1065,32 @@ export default function CandidatePortalPage() {
                       className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-xs text-slate-900 dark:text-slate-100"
                     />
                   </label>
+
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Email ID *
+                    <div className="relative mt-1">
+                      <input
+                        type="email"
+                        required
+                        value={kycForm.email}
+                        onChange={(e) => setKycForm({ ...kycForm, email: e.target.value })}
+                        className="w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 pl-8 pr-3 py-2 text-xs text-slate-900 dark:text-slate-100"
+                      />
+                      <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                    </div>
+                  </label>
+
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                     Date of Birth *
                     <input
-                      type="text"
+                      type="date"
                       required
-                      placeholder="e.g. 30 September 1992"
                       value={kycForm.dob}
                       onChange={(e) => setKycForm({ ...kycForm, dob: e.target.value })}
                       className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-xs text-slate-900 dark:text-slate-100"
                     />
                   </label>
+
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                     Nationality *
                     <input
@@ -838,6 +1101,7 @@ export default function CandidatePortalPage() {
                       className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-xs text-slate-900 dark:text-slate-100"
                     />
                   </label>
+
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                     Gender *
                     <select
@@ -851,6 +1115,7 @@ export default function CandidatePortalPage() {
                       <option value="Other">Other</option>
                     </select>
                   </label>
+
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                     Marital Status *
                     <select
@@ -865,16 +1130,38 @@ export default function CandidatePortalPage() {
                       <option value="Widowed">Widowed</option>
                     </select>
                   </label>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Mobile Phone (+977) *
-                    <input
-                      type="tel"
-                      required
-                      value={kycForm.phone}
-                      onChange={(e) => setKycForm({ ...kycForm, phone: e.target.value })}
-                      className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-xs text-slate-900 dark:text-slate-100"
-                    />
-                  </label>
+
+                  {/* Comprehensive Country Dial Code + Mobile Phone */}
+                  <div className="space-y-1 sm:col-span-2 lg:col-span-3">
+                    <span className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Mobile Phone &amp; Country Code *
+                    </span>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <select
+                        value={kycForm.dial_code}
+                        onChange={(e) => setKycForm({ ...kycForm, dial_code: e.target.value })}
+                        className="w-full sm:w-60 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2.5 py-2 text-xs text-slate-900 dark:text-slate-100 font-medium"
+                      >
+                        {COUNTRY_DIAL_CODES.map((c) => (
+                          <option key={`${c.country}-${c.code}`} value={c.code}>
+                            {c.flag} {c.country} ({c.code})
+                          </option>
+                        ))}
+                      </select>
+                      <div className="relative flex-1">
+                        <input
+                          type="tel"
+                          required
+                          placeholder="e.g. 9801234567"
+                          value={kycForm.phone_number}
+                          onChange={(e) => setKycForm({ ...kycForm, phone_number: e.target.value })}
+                          className="w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 pl-8 pr-3 py-2 text-xs text-slate-900 dark:text-slate-100 font-mono"
+                        />
+                        <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                      </div>
+                    </div>
+                  </div>
+
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 sm:col-span-2 lg:col-span-3">
                     Permanent Address in Nepal *
                     <input
@@ -934,7 +1221,7 @@ export default function CandidatePortalPage() {
                     />
                   </label>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Citizenship / Nagarikta Number *
+                    Citizenship Number *
                     <input
                       type="text"
                       required
@@ -1075,15 +1362,150 @@ export default function CandidatePortalPage() {
                 </div>
               </div>
 
+              {/* 5. DIGITAL SIGNATURE PAD & UPLOADER SECTION */}
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-xs font-bold uppercase text-slate-500 tracking-wider flex items-center gap-1.5">
+                      <PenTool className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>5. Candidate Digital Signature *</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Provide your official electronic signature to be stamped on Danish visa petitions and employment contracts.
+                    </p>
+                  </div>
+
+                  {/* Mode Switcher */}
+                  <div className="flex rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 p-1 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setSignatureMode('draw')}
+                      className={`px-3 py-1 rounded font-bold transition-all ${
+                        signatureMode === 'draw'
+                          ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      Draw Signature
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSignatureMode('upload')}
+                      className={`px-3 py-1 rounded font-bold transition-all ${
+                        signatureMode === 'upload'
+                          ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      Upload Signature
+                    </button>
+                  </div>
+                </div>
+
+                {/* Draw Canvas Mode */}
+                {signatureMode === 'draw' && (
+                  <div className="space-y-2">
+                    <div className="rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-white p-2">
+                      <canvas
+                        ref={signatureCanvasRef}
+                        width={600}
+                        height={180}
+                        onMouseDown={startDrawing}
+                        onMouseMove={draw}
+                        onMouseUp={stopDrawing}
+                        onMouseLeave={stopDrawing}
+                        onTouchStart={startTouchDrawing}
+                        onTouchMove={drawTouch}
+                        onTouchEnd={stopDrawing}
+                        className="w-full h-36 bg-white cursor-crosshair touch-none rounded-lg"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-[11px] text-slate-400">
+                        Sign inside the box using your mouse, trackpad, or touch screen.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={clearSignatureCanvas}
+                        className="px-3 py-1 rounded-md border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Clear</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Upload Image Mode */}
+                {signatureMode === 'upload' && (
+                  <div className="rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-6 text-center space-y-3">
+                    <Upload className="w-8 h-8 text-slate-400 mx-auto" />
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        Upload Your Signed Signature Image
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto">
+                        Photograph or scan your handwritten signature on blank white paper. Formats: PNG, JPG, WebP.
+                      </p>
+                    </div>
+                    <input
+                      ref={signatureUploadRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={handleSignatureFileUpload}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => signatureUploadRef.current?.click()}
+                      className="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-sm transition-all"
+                    >
+                      Select Signature Image
+                    </button>
+                  </div>
+                )}
+
+                {/* Current Active Signature Preview Box */}
+                {kycForm.signature_data_url && (
+                  <div className="p-3.5 rounded-xl border border-emerald-300 dark:border-emerald-800/80 bg-emerald-50/50 dark:bg-emerald-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-14 w-44 rounded-lg bg-white border border-emerald-200 dark:border-emerald-800 p-1 flex items-center justify-center overflow-hidden shrink-0">
+                        <img
+                          src={kycForm.signature_data_url}
+                          alt="Signature Preview"
+                          className="max-h-full max-w-full object-contain"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                          <Check className="w-4 h-4 text-emerald-600" />
+                          <span>Active Signature Ready to Save</span>
+                        </div>
+                        <p className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80 mt-0.5">
+                          This signature will be stamped on your official dossier and submitted to the caseworker desk.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearSignatureCanvas}
+                      className="text-xs text-red-600 hover:text-red-700 dark:text-red-400 font-semibold self-end sm:self-auto"
+                    >
+                      Remove / Retake
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* Prominent Save Button */}
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4">
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
                 <p className="text-xs text-slate-500">
                   Click save to submit your updated identity profile directly to your caseworker for statutory verification.
                 </p>
                 <button
                   type="submit"
                   disabled={isSavingKyc}
-                  className="px-6 py-3 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-md transition-all flex items-center gap-2 shrink-0 disabled:opacity-50"
+                  className="px-6 py-3 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 shrink-0 disabled:opacity-50"
                 >
                   <ShieldCheck className="w-4 h-4" />
                   <span>{isSavingKyc ? 'Saving Information...' : '💾 Save & Update KYC Information'}</span>

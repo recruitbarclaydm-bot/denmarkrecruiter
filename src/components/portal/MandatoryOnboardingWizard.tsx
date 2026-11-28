@@ -65,9 +65,9 @@ const documentSlots = [
   },
   {
     id: 'citizenship',
-    name: 'Nepalese Citizenship Certificate (Nagarikta / National ID)',
+    name: 'Nepalese Citizenship Certificate (Citizenship / National ID)',
     category: 'Core Citizenship',
-    aliases: ['citizenship', 'nagarikta', 'national id'],
+    aliases: ['citizenship', 'national id'],
     required: true,
   },
   {
@@ -141,7 +141,7 @@ const textFields: { key: keyof KycFormValues; label: string; type?: string }[] =
   { key: 'passport_expiry', label: 'Passport expiry', type: 'date' },
   { key: 'father_name', label: "Father's full name", type: 'text' },
   { key: 'mother_name', label: "Mother's full name", type: 'text' },
-  { key: 'citizenship_number', label: 'Citizenship / Nagarikta number', type: 'text' },
+  { key: 'citizenship_number', label: 'Citizenship certificate number', type: 'text' },
   { key: 'national_id_nin', label: 'National ID / NIN (if issued)', type: 'text' },
   { key: 'passport_issue_date', label: 'Passport issue date', type: 'date' },
   { key: 'passport_issue_place', label: 'Passport issue place', type: 'text' },

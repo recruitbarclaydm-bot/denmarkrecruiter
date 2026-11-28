@@ -158,27 +158,27 @@ export const CandidateProcessPanel: React.FC<{ candidate: CandidateRecord }> = (
                 </span>
               </div>
 
-              <div className="space-y-1.5 pt-1">
-                <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+              <div className="space-y-2 pt-1">
+                <label className="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-200 cursor-pointer select-none py-0.5">
                   <input
                     type="checkbox"
                     checked={prepChecklist.passportAndCitizenshipReady}
                     onChange={() => handleTogglePrep('passportAndCitizenshipReady')}
-                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                    className="rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 w-4 h-4 flex-shrink-0"
                   />
-                  <span className={prepChecklist.passportAndCitizenshipReady ? 'line-through text-slate-400' : ''}>
+                  <span className={prepChecklist.passportAndCitizenshipReady ? 'line-through text-slate-400 dark:text-slate-500' : ''}>
                     Original Passport in hand for live visual check
                   </span>
                 </label>
 
-                <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+                <label className="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-200 cursor-pointer select-none py-0.5">
                   <input
                     type="checkbox"
                     checked={prepChecklist.quietRoomAndTechTested}
                     onChange={() => handleTogglePrep('quietRoomAndTechTested')}
-                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                    className="rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 w-4 h-4 flex-shrink-0"
                   />
-                  <span className={prepChecklist.quietRoomAndTechTested ? 'line-through text-slate-400' : ''}>
+                  <span className={prepChecklist.quietRoomAndTechTested ? 'line-through text-slate-400 dark:text-slate-500' : ''}>
                     High-speed internet, microphone &amp; lighting verified
                   </span>
                 </label>
@@ -253,28 +253,28 @@ export const CandidateProcessPanel: React.FC<{ candidate: CandidateRecord }> = (
                 </span>
               </div>
 
-              <div className="space-y-1.5 pt-1">
-                <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+              <div className="space-y-2 pt-1">
+                <label className="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-200 cursor-pointer select-none py-0.5">
                   <input
                     type="checkbox"
                     checked={prepChecklist.passportAndCitizenshipReady}
                     onChange={() => handleTogglePrep('passportAndCitizenshipReady')}
-                    className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
+                    className="rounded border-slate-300 dark:border-slate-600 text-emerald-600 focus:ring-emerald-500 w-4 h-4 flex-shrink-0"
                   />
-                  <span className={prepChecklist.passportAndCitizenshipReady ? 'line-through text-slate-400' : ''}>
-                    Original Passport &amp; Citizenship in hand
+                  <span className={prepChecklist.passportAndCitizenshipReady ? 'line-through text-slate-400 dark:text-slate-500' : ''}>
+                    Original Passport &amp; Citizenship certificate in hand
                   </span>
                 </label>
 
-                <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+                <label className="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-200 cursor-pointer select-none py-0.5">
                   <input
                     type="checkbox"
                     checked={prepChecklist.dossierSummaryPrinted}
                     onChange={() => handleTogglePrep('dossierSummaryPrinted')}
-                    className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
+                    className="rounded border-slate-300 dark:border-slate-600 text-emerald-600 focus:ring-emerald-500 w-4 h-4 flex-shrink-0"
                   />
-                  <span className={prepChecklist.dossierSummaryPrinted ? 'line-through text-slate-400' : ''}>
-                    Printed Appointment / Dossier Summary ready
+                  <span className={prepChecklist.dossierSummaryPrinted ? 'line-through text-slate-400 dark:text-slate-500' : ''}>
+                    Printed Appointment Slip &amp; Dossier Summary ready
                   </span>
                 </label>
               </div>

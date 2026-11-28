@@ -52,20 +52,20 @@ export const ChecklistCard: React.FC = () => {
           <div
             key={item.id}
             onClick={() => handleToggle(item.id, item.label, item.checked)}
-            className={`flex items-start gap-3 p-3 rounded-lg border transition-all cursor-pointer select-none ${
+            className={`flex items-center gap-3 p-3.5 rounded-xl border transition-all cursor-pointer select-none ${
               item.checked
                 ? 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-slate-700 dark:text-slate-300'
-                : 'bg-slate-50/50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                : 'bg-slate-50/50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-slate-300'
             }`}
           >
-            <div className="mt-0.5 flex-shrink-0">
+            <div className="flex-shrink-0">
               {item.checked ? (
                 <CheckSquare className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               ) : (
                 <Square className="w-4 h-4 text-slate-400" />
               )}
             </div>
-            <span className={`text-xs font-medium ${item.checked ? 'line-through text-slate-400 dark:text-slate-500' : ''}`}>
+            <span className={`text-xs sm:text-sm font-medium leading-normal ${item.checked ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-200'}`}>
               {item.label}
             </span>
           </div>
