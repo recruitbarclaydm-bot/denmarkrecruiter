@@ -63,7 +63,7 @@ export default function PendingApprovalPage() {
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex flex-col transition-colors">
-      <Header />
+      <Header hidePrint />
 
       <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-10 space-y-6">
         {/* Main Status Hero Card */}

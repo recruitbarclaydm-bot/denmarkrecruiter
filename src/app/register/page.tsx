@@ -141,7 +141,7 @@ export default function CandidateRegisterPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-100 dark:bg-slate-950 transition-colors">
-      <Header />
+      <Header hidePrint />
 
       <main className="flex-1 max-w-2xl w-full mx-auto p-4 sm:p-6 my-auto">
         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8">

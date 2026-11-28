@@ -23,7 +23,11 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
-export const Header: React.FC = () => {
+interface HeaderProps {
+  hidePrint?: boolean;
+}
+
+export const Header: React.FC<HeaderProps> = ({ hidePrint = false }) => {
   const { user, logout } = useAuth();
   const { candidates, markNotificationRead, markAllNotificationsRead, refreshStore } = usePortalStore();
   const { language, setLanguage, t } = useLanguage();
@@ -285,14 +289,16 @@ export const Header: React.FC = () => {
           </button>
 
           {/* Print Button */}
-          <button
-            onClick={handlePrint}
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-            title={t('printDossier')}
-          >
-            <Printer className="w-3.5 h-3.5 text-slate-500" />
-            <span>{t('printDossier')}</span>
-          </button>
+          {!hidePrint && (
+            <button
+              onClick={handlePrint}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+              title={t('printDossier')}
+            >
+              <Printer className="w-3.5 h-3.5 text-slate-500" />
+              <span>{t('printDossier')}</span>
+            </button>
+          )}
 
           {/* Logout Button */}
           {user && (

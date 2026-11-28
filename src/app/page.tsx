@@ -74,7 +74,7 @@ export default function CandidateLoginPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-100 dark:bg-slate-950 transition-colors">
-      <Header />
+      <Header hidePrint />
 
       <main className="flex-1 flex items-center justify-center p-4 sm:p-6 my-auto">
         <div

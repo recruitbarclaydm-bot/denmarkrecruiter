@@ -210,7 +210,7 @@ export default function TrackApplicationPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col transition-colors">
-      <Header />
+      <Header hidePrint />
 
       <main className="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-6">
         {/* Page Header */}
@@ -277,32 +277,10 @@ export default function TrackApplicationPage() {
             </button>
           </form>
 
-          {/* Quick Demo Pill Helper */}
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 flex-wrap gap-2">
-            <span>Demo Test Lookups:</span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setCaseOrderId('SB6-948123-2026');
-                  setPassportNumber('PA4635786');
-                }}
-                className="hover:underline font-mono text-emerald-700 dark:text-emerald-400"
-              >
-                Dipak Karki
-              </button>
-              <span>&middot;</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setCaseOrderId('DEN-AGRI-944135-2026');
-                  setPassportNumber('PA3880717');
-                }}
-                className="hover:underline font-mono text-emerald-700 dark:text-emerald-400"
-              >
-                Nokha Nath Adhikari
-              </button>
-            </div>
+          {/* Security & Instructions Notice */}
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>Enter your assigned Case Order ID and Passport Number to view your current application stage.</span>
           </div>
         </div>
 

@@ -62,7 +62,7 @@ export default function AdminLoginPage() {
         <meta name="robots" content="noindex, nofollow" />
       </head>
 
-      <Header />
+      <Header hidePrint />
 
       <main className="flex-1 flex items-center justify-center p-4 sm:p-6 my-auto">
         <div
