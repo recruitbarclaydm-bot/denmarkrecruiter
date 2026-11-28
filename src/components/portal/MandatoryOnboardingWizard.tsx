@@ -7,7 +7,7 @@ import { useToast } from '@/context/ToastContext';
 import { getSignedDocumentUrl } from '@/lib/supabase';
 import { DocumentSigningModal } from '@/components/portal/DocumentSigningModal';
 import { compressImageFile } from '@/utils/imageCompression';
-import { CheckCircle2, Clock3, FileText, ImagePlus, LockKeyhole, ShieldCheck, Upload, AlertCircle, Sparkles } from 'lucide-react';
+import { CheckCircle2, Clock3, FileText, ImagePlus, ShieldCheck, Upload, AlertCircle, Sparkles } from 'lucide-react';
 
 interface MandatoryOnboardingWizardProps {
   candidate: CandidateRecord;
@@ -98,13 +98,6 @@ const documentSlots = [
     aliases: ['medical', 'fitness certificate'],
     required: false,
   },
-  {
-    id: 'subscription_receipt',
-    name: 'Service Fee Payment Receipt',
-    category: 'subscription_receipt',
-    aliases: ['receipt', 'service fee', 'subscription'],
-    required: false,
-  },
 ];
 
 const matchesSlot = (document: DocumentRecord, slot: (typeof documentSlots)[number]) => {
@@ -168,7 +161,7 @@ const selectFields: { key: keyof KycFormValues; label: string; options: string[]
 const fieldClass = 'w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-xs text-slate-900 dark:text-slate-100 disabled:bg-slate-100 dark:disabled:bg-slate-900';
 
 export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps> = ({ candidate, onViewTracker }) => {
-  const { uploadCandidateAvatar, uploadCoreDocument, submitServiceFeeReceipt, updateCandidateKyc, refreshStore } = usePortalStore();
+  const { uploadCandidateAvatar, uploadCoreDocument, updateCandidateKyc, refreshStore } = usePortalStore();
   const { showToast } = useToast();
   const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1);
   const [form, setForm] = useState<KycFormValues>(() => getFormValues(candidate));
@@ -177,13 +170,9 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
   const [targetSlotId, setTargetSlotId] = useState<string | null>(null);
   const [docForSigning, setDocForSigning] = useState<DocumentRecord | null>(null);
   const [compressionBadge, setCompressionBadge] = useState<string | null>(null);
-  const [isEditingKyc, setIsEditingKyc] = useState<boolean>(
-    candidate.kycStatus === 'pending' || candidate.kycStatus === 'rejected'
-  );
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const documentInputRef = useRef<HTMLInputElement | null>(null);
 
-  const canEditKyc = isEditingKyc || candidate.kycStatus === 'pending' || candidate.kycStatus === 'rejected';
   const kycSubmitted = candidate.kycStatus === 'submitted';
   const kycVerified = candidate.kycStatus === 'verified';
   const kycRejected = candidate.kycStatus === 'rejected';
@@ -225,17 +214,7 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
     try {
       const comp = await compressImageFile(file, { maxWidth: 1800, maxHeight: 2400, quality: 0.82 });
       if (comp.wasCompressed) setCompressionBadge(comp.badgeText || null);
-      if (slot.id === 'subscription_receipt') {
-        await submitServiceFeeReceipt(candidate.id, comp.file, {
-          amount: '€45.00',
-          method: 'Bank Transfer / Remittance',
-          transactionId: `TX-${Date.now().toString().slice(-6)}`,
-          paymentDate: new Date().toISOString().slice(0, 10),
-          remarks: 'Service fee receipt upload',
-        });
-      } else {
-        await uploadCoreDocument(candidate.id, slot.name, slot.category, comp.file, existing?.id);
-      }
+      await uploadCoreDocument(candidate.id, slot.name, slot.category, comp.file, existing?.id);
       showToast(comp.wasCompressed ? `${slot.name} optimized & uploaded! (${comp.badgeText})` : `${slot.name} uploaded for caseworker audit.`, 'success');
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Unable to upload document.', 'error');
@@ -286,7 +265,6 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
         },
         workExperienceSummary: form.work_skills_summary.trim(),
       });
-      setIsEditingKyc(false);
       showToast(
         kycRejected
           ? 'Corrected KYC submitted for caseworker audit.'
@@ -375,40 +353,26 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
               </button>
 
               {kycVerified && (
-                <div className="rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 p-3 text-xs text-emerald-800 dark:text-emerald-300 space-y-2">
+                <div className="rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 p-3 text-xs text-emerald-800 dark:text-emerald-300 space-y-1">
                   <div className="flex items-center gap-2 font-bold">
                     <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                     <span>Identity KYC Verified &amp; Approved</span>
                   </div>
                   <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
-                    Your identity records are verified. You can update your details anytime if corrections are required.
+                    Your identity records are verified. You can update your details anytime below if corrections are required.
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingKyc(!isEditingKyc)}
-                    className="w-full inline-flex items-center justify-center gap-1.5 rounded-md border border-emerald-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-slate-800"
-                  >
-                    {isEditingKyc ? 'Cancel Editing' : '✏️ Edit & Update KYC Details'}
-                  </button>
                 </div>
               )}
 
               {kycSubmitted && (
-                <div className="rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-300 space-y-2">
+                <div className="rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-300 space-y-1">
                   <div className="flex items-center gap-2 font-bold">
                     <Clock3 className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                     <span>Under Caseworker Audit</span>
                   </div>
                   <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                    Your KYC submission is currently being reviewed by your caseworker.
+                    Your KYC submission is currently being reviewed by your caseworker. You can update details below anytime.
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingKyc(!isEditingKyc)}
-                    className="w-full inline-flex items-center justify-center gap-1.5 rounded-md border border-amber-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-slate-800"
-                  >
-                    {isEditingKyc ? 'Cancel Editing' : '✏️ Edit & Update KYC Details'}
-                  </button>
                 </div>
               )}
 
@@ -434,7 +398,7 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
                       type={field.type || 'text'}
                       value={form[field.key]}
                       required={requiredKycFields.includes(field.key)}
-                      disabled={!canEditKyc}
+                      disabled={isSubmitting}
                       onChange={(event) => setForm((current) => ({ ...current, [field.key]: event.target.value }))}
                       className={`${fieldClass} mt-1`}
                     />
@@ -446,7 +410,7 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
                     <select
                       value={form[field.key]}
                       required
-                      disabled={!canEditKyc}
+                      disabled={isSubmitting}
                       onChange={(event) => setForm((current) => ({ ...current, [field.key]: event.target.value }))}
                       className={`${fieldClass} mt-1`}
                     >
@@ -460,7 +424,7 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
                   <textarea
                     value={form.work_skills_summary}
                     required
-                    disabled={!canEditKyc}
+                    disabled={isSubmitting}
                     onChange={(event) => setForm((current) => ({ ...current, work_skills_summary: event.target.value }))}
                     rows={3}
                     className={`${fieldClass} mt-1`}
@@ -468,46 +432,19 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
                 </label>
               </div>
 
-              {canEditKyc ? (
-                <div className="flex items-center gap-3 pt-2">
-                  <button
-                    type="submit"
-                    disabled={isSubmitting || !candidate.avatarStoragePath}
-                    className="rounded-md bg-emerald-700 px-5 py-2.5 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-50 shadow-sm"
-                  >
-                    {isSubmitting
-                      ? 'Submitting KYC...'
-                      : kycRejected
-                      ? 'Fix & Re-submit KYC'
-                      : kycVerified || kycSubmitted
-                      ? 'Save & Submit Updated KYC'
-                      : 'Submit Full KYC for Review'}
-                  </button>
-                  {(kycVerified || kycSubmitted) && isEditingKyc && (
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingKyc(false)}
-                      className="rounded-md border border-slate-300 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div className="flex items-center justify-between gap-3 rounded-md bg-slate-100 p-3 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                  <div className="flex items-center gap-2">
-                    <LockKeyhole className="h-4 w-4 text-slate-500" />
-                    <span>KYC details are currently locked. Click below to unlock and edit.</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingKyc(true)}
-                    className="rounded bg-white dark:bg-slate-700 px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-600 shadow-sm hover:bg-slate-50"
-                  >
-                    ✏️ Edit KYC
-                  </button>
-                </div>
-              )}
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={isSubmitting || !candidate.avatarStoragePath}
+                  className="rounded-md bg-emerald-700 px-5 py-2.5 text-xs font-bold text-white hover:bg-emerald-800 disabled:opacity-50 shadow-sm"
+                >
+                  {isSubmitting
+                    ? 'Saving KYC...'
+                    : kycRejected
+                    ? 'Fix & Re-submit KYC'
+                    : '💾 Save & Update KYC Information'}
+                </button>
+              </div>
             </form>
           </div>
         )}
