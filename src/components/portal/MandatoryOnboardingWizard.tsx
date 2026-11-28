@@ -6,7 +6,8 @@ import { usePortalStore } from '@/context/PortalStoreContext';
 import { useToast } from '@/context/ToastContext';
 import { getSignedDocumentUrl } from '@/lib/supabase';
 import { DocumentSigningModal } from '@/components/portal/DocumentSigningModal';
-import { CheckCircle2, Clock3, FileText, ImagePlus, LockKeyhole, ShieldCheck, Upload, AlertCircle } from 'lucide-react';
+import { compressImageFile } from '@/utils/imageCompression';
+import { CheckCircle2, Clock3, FileText, ImagePlus, LockKeyhole, ShieldCheck, Upload, AlertCircle, Sparkles } from 'lucide-react';
 
 interface MandatoryOnboardingWizardProps {
   candidate: CandidateRecord;
@@ -175,6 +176,7 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [targetSlotId, setTargetSlotId] = useState<string | null>(null);
   const [docForSigning, setDocForSigning] = useState<DocumentRecord | null>(null);
+  const [compressionBadge, setCompressionBadge] = useState<string | null>(null);
   const [isEditingKyc, setIsEditingKyc] = useState<boolean>(
     candidate.kycStatus === 'pending' || candidate.kycStatus === 'rejected'
   );
@@ -200,9 +202,12 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
     const file = event.target.files?.[0];
     if (!file) return;
     setIsUploadingAvatar(true);
+    setCompressionBadge(null);
     try {
-      await uploadCandidateAvatar(candidate.id, file);
-      showToast('Biometric profile photo uploaded & submitted for review.', 'success');
+      const comp = await compressImageFile(file, { maxWidth: 600, maxHeight: 800, quality: 0.85 });
+      if (comp.wasCompressed) setCompressionBadge(comp.badgeText || null);
+      await uploadCandidateAvatar(candidate.id, comp.file);
+      showToast(comp.wasCompressed ? `Biometric photo optimized & uploaded! (${comp.badgeText})` : 'Biometric profile photo uploaded & submitted for review.', 'success');
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Unable to upload profile photo.', 'error');
     } finally {
@@ -216,9 +221,12 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
     const slot = documentSlots.find((item) => item.id === targetSlotId);
     if (!file || !slot) return;
     const existing = getSlotDocument(slot);
+    setCompressionBadge(null);
     try {
+      const comp = await compressImageFile(file, { maxWidth: 1800, maxHeight: 2400, quality: 0.82 });
+      if (comp.wasCompressed) setCompressionBadge(comp.badgeText || null);
       if (slot.id === 'subscription_receipt') {
-        await submitServiceFeeReceipt(candidate.id, file, {
+        await submitServiceFeeReceipt(candidate.id, comp.file, {
           amount: '€45.00',
           method: 'Bank Transfer / Remittance',
           transactionId: `TX-${Date.now().toString().slice(-6)}`,
@@ -226,9 +234,9 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
           remarks: 'Service fee receipt upload',
         });
       } else {
-        await uploadCoreDocument(candidate.id, slot.name, slot.category, file, existing?.id);
+        await uploadCoreDocument(candidate.id, slot.name, slot.category, comp.file, existing?.id);
       }
-      showToast(`${slot.name} uploaded for caseworker audit.`, 'success');
+      showToast(comp.wasCompressed ? `${slot.name} optimized & uploaded! (${comp.badgeText})` : `${slot.name} uploaded for caseworker audit.`, 'success');
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Unable to upload document.', 'error');
     } finally {
@@ -338,6 +346,13 @@ export const MandatoryOnboardingWizard: React.FC<MandatoryOnboardingWizardProps>
             </button>
           ))}
         </div>
+
+        {compressionBadge && (
+          <div className="mt-3 flex items-center gap-1.5 rounded-md border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-200">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+            <span>{compressionBadge}</span>
+          </div>
+        )}
 
         {activeStep === 1 && (
           <div className="grid grid-cols-1 xl:grid-cols-[250px_1fr] gap-5 pt-4">

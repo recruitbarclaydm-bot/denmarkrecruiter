@@ -18,6 +18,10 @@ import {
   DollarSign,
   Sparkles,
   PenTool,
+  Star,
+  MessageSquare,
+  Award,
+  Check,
 } from 'lucide-react';
 import { OfficialContractGeneratorModal } from './OfficialContractGeneratorModal';
 
@@ -54,6 +58,43 @@ const RECEIPT_REJECTION_CHIPS = [
   'Payer Name Does Not Match Applicant',
 ];
 
+const RatingSelector = ({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (val: number) => void;
+}) => (
+  <div>
+    <div className="flex items-center justify-between mb-1.5">
+      <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+        {label}
+      </span>
+      <span className="text-xs font-bold text-amber-500 flex items-center gap-1">
+        {value} / 5 <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+      </span>
+    </div>
+    <div className="grid grid-cols-5 gap-1.5">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          onClick={() => onChange(star)}
+          className={`py-1.5 text-xs font-bold rounded-lg border transition-all ${
+            value >= star
+              ? 'bg-amber-500/20 border-amber-500/40 text-amber-500 dark:text-amber-300 shadow-sm'
+              : 'bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          {star} ★
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
 export const AdminCaseTools: React.FC<AdminCaseToolsProps> = ({ candidate, actor, activeTab = 'all' }) => {
   const {
     updateCandidateAgencyDetails,
@@ -62,6 +103,9 @@ export const AdminCaseTools: React.FC<AdminCaseToolsProps> = ({ candidate, actor
     sendCandidateNotification,
     adminCrmMetadata,
     saveAdminCrmMetadata,
+    saveCandidateEvaluation,
+    sendDirectMessage,
+    markMessagesAsRead,
   } = usePortalStore();
   const { showToast } = useToast();
 
@@ -113,6 +157,21 @@ export const AdminCaseTools: React.FC<AdminCaseToolsProps> = ({ candidate, actor
     adminCrmMetadata[candidate.id]?.priority || 'Normal'
   );
 
+  // Scorecard state
+  const existingEval = candidate.processMeta?.evaluation;
+  const [commRating, setCommRating] = useState<number>(existingEval?.communicationRating ?? 5);
+  const [expRating, setExpRating] = useState<number>(existingEval?.experienceRating ?? 4);
+  const [authRating, setAuthRating] = useState<number>(existingEval?.documentAuthenticityRating ?? 5);
+  const [readinessRating, setReadinessRating] = useState<number>(
+    existingEval?.overallReadinessRating ?? existingEval?.employerReadinessRating ?? 5
+  );
+  const [evalNotes, setEvalNotes] = useState<string>(existingEval?.evaluatorNotes ?? existingEval?.notes ?? '');
+  const [isSavingEval, setIsSavingEval] = useState<boolean>(false);
+
+  // Direct chat reply state
+  const [chatReplyText, setChatReplyText] = useState<string>('');
+  const [isSendingReply, setIsSendingReply] = useState<boolean>(false);
+
   // Document Generator
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
   const [isWorking, setIsWorking] = useState(false);
@@ -145,6 +204,24 @@ export const AdminCaseTools: React.FC<AdminCaseToolsProps> = ({ candidate, actor
     );
     setCoordinatorNotes(adminCrmMetadata[candidate.id]?.notes || '');
     setPriority(adminCrmMetadata[candidate.id]?.priority || 'Normal');
+
+    if (candidate.processMeta?.evaluation) {
+      setCommRating(candidate.processMeta.evaluation.communicationRating);
+      setExpRating(candidate.processMeta.evaluation.experienceRating);
+      setAuthRating(candidate.processMeta.evaluation.documentAuthenticityRating);
+      setReadinessRating(
+        candidate.processMeta.evaluation.overallReadinessRating ??
+          candidate.processMeta.evaluation.employerReadinessRating ??
+          5
+      );
+      setEvalNotes(candidate.processMeta.evaluation.evaluatorNotes || candidate.processMeta.evaluation.notes || '');
+    } else {
+      setCommRating(5);
+      setExpRating(4);
+      setAuthRating(5);
+      setReadinessRating(5);
+      setEvalNotes('');
+    }
   }, [
     candidate.id,
     candidate.processMeta,
@@ -304,6 +381,65 @@ Please log in to complete your KYC declaration and review official documents.`;
   const showFinancial = activeTab === 'all' || activeTab === 'financial';
   const showInterviews = activeTab === 'all' || activeTab === 'interviews';
   const showCrm = activeTab === 'all' || activeTab === 'overview';
+
+  useEffect(() => {
+    if (showInterviews && candidate.processMeta?.messages?.some((m) => (m.sender === 'candidate' || m.senderRole === 'candidate') && !m.read)) {
+      void markMessagesAsRead(candidate.id, 'coordinator');
+    }
+  }, [showInterviews, candidate.id, candidate.processMeta?.messages, markMessagesAsRead]);
+
+  const getRecommendation = (score: number) => {
+    if (score >= 17) return { text: 'Strongly Recommended', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' };
+    if (score >= 14) return { text: 'Recommend with Reservations', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30' };
+    if (score >= 10) return { text: 'Needs Further Review', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30' };
+    return { text: 'Not Recommended', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30' };
+  };
+
+  const handleSaveEvaluation = async () => {
+    setIsSavingEval(true);
+    try {
+      const total = commRating + expRating + authRating + readinessRating;
+      let rec: 'strongly_recommend' | 'recommend_with_reservations' | 'needs_further_review' | 'not_recommended';
+      if (total >= 17) rec = 'strongly_recommend';
+      else if (total >= 14) rec = 'recommend_with_reservations';
+      else if (total >= 10) rec = 'needs_further_review';
+      else rec = 'not_recommended';
+
+      await saveCandidateEvaluation(candidate.id, {
+        communicationRating: commRating,
+        experienceRating: expRating,
+        documentAuthenticityRating: authRating,
+        employerReadinessRating: readinessRating,
+        overallReadinessRating: readinessRating,
+        totalScore: total,
+        recommendation: rec,
+        evaluatorNotes: evalNotes.trim(),
+        notes: evalNotes.trim(),
+        evaluatedBy: actor || 'Caseworker Coordinator',
+        evaluatedAt: new Date().toISOString(),
+      });
+      showToast('Candidate evaluation scorecard saved successfully', 'success');
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Failed to save evaluation', 'error');
+    } finally {
+      setIsSavingEval(false);
+    }
+  };
+
+  const handleSendChatReply = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!chatReplyText.trim() || isSendingReply) return;
+    setIsSendingReply(true);
+    try {
+      await sendDirectMessage(candidate.id, chatReplyText.trim(), 'coordinator', actor || 'Caseworker Coordinator');
+      setChatReplyText('');
+      showToast('Direct message sent to candidate portal', 'success');
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Failed to send message', 'error');
+    } finally {
+      setIsSendingReply(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -673,6 +809,167 @@ Please log in to complete your KYC declaration and review official documents.`;
               <MessageCircle className="w-4 h-4" />
               <span>Send In-App Notification &amp; Open WhatsApp Chat</span>
             </button>
+          </section>
+
+          {/* Structured Candidate Evaluation Scorecard */}
+          <section className="rounded-2xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-slate-900/60 p-6 shadow-sm backdrop-blur-sm space-y-4">
+            <div className="border-b border-slate-100 dark:border-white/[0.08] pb-3 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
+                  <Award className="w-4 h-4 text-amber-500" />
+                  <span>Structured Candidate Evaluation Scorecard</span>
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Assesses placement readiness across 4 standard pillars (Auto-graded out of 20).
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="px-3 py-1 rounded-full text-xs font-extrabold border bg-amber-500/10 text-amber-500 dark:text-amber-300 border-amber-500/30 flex items-center gap-1.5">
+                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                  <span>Score: {commRating + expRating + authRating + readinessRating} / 20</span>
+                </div>
+                <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${getRecommendation(commRating + expRating + authRating + readinessRating).color}`}>
+                  {getRecommendation(commRating + expRating + authRating + readinessRating).text}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <RatingSelector
+                label="1. Communication & English / Danish Fluency"
+                value={commRating}
+                onChange={setCommRating}
+              />
+              <RatingSelector
+                label="2. Agricultural Experience & Technical Competence"
+                value={expRating}
+                onChange={setExpRating}
+              />
+              <RatingSelector
+                label="3. Document Authenticity & Identity Match"
+                value={authRating}
+                onChange={setAuthRating}
+              />
+              <RatingSelector
+                label="4. Overall Relocation & Adaptation Readiness"
+                value={readinessRating}
+                onChange={setReadinessRating}
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                Evaluator Notes &amp; Recommendation Details
+              </label>
+              <textarea
+                rows={2}
+                value={evalNotes}
+                onChange={(e) => setEvalNotes(e.target.value)}
+                placeholder="e.g. Applicant shows high motivation, clear farm experience in Nepal, passport authenticated..."
+                className={inputClass}
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+              <div className="text-[11px] text-slate-400">
+                {candidate.processMeta?.evaluation?.evaluatedAt ? (
+                  <span>
+                    Last evaluated by <strong className="text-slate-200">{candidate.processMeta.evaluation.evaluatedBy}</strong> on{' '}
+                    {new Date(candidate.processMeta.evaluation.evaluatedAt).toLocaleDateString()}
+                  </span>
+                ) : (
+                  <span>No evaluation recorded yet</span>
+                )}
+              </div>
+              <button
+                type="button"
+                disabled={isSavingEval}
+                onClick={handleSaveEvaluation}
+                className="rounded-xl bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-amber-950/20 disabled:opacity-50"
+              >
+                <Check className="w-4 h-4" />
+                <span>{isSavingEval ? 'Saving...' : 'Save Evaluation Scorecard'}</span>
+              </button>
+            </div>
+          </section>
+
+          {/* Direct Coordinator Support Desk */}
+          <section className="rounded-2xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-slate-900/60 p-6 shadow-sm backdrop-blur-sm space-y-4">
+            <div className="border-b border-slate-100 dark:border-white/[0.08] pb-3 flex items-center justify-between">
+              <div>
+                <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
+                  <MessageSquare className="w-4 h-4 text-emerald-500" />
+                  <span>Direct Candidate Support Desk</span>
+                  {candidate.processMeta?.messages &&
+                    candidate.processMeta.messages.filter((m) => (m.sender === 'candidate' || m.senderRole === 'candidate') && !m.read).length > 0 && (
+                      <span className="text-[10px] bg-emerald-500 text-slate-950 font-extrabold px-2 py-0.5 rounded-full">
+                        {candidate.processMeta.messages.filter((m) => (m.sender === 'candidate' || m.senderRole === 'candidate') && !m.read).length} Unread
+                      </span>
+                    )}
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Two-way direct communication thread with {candidate.name}.
+                </p>
+              </div>
+            </div>
+
+            {/* Chat messages */}
+            <div className="max-h-72 overflow-y-auto space-y-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-slate-200 dark:border-white/5">
+              {!candidate.processMeta?.messages || candidate.processMeta.messages.length === 0 ? (
+                <div className="text-center py-6 text-xs text-slate-400">
+                  No direct messages exchanged yet with this applicant.
+                </div>
+              ) : (
+                candidate.processMeta.messages.map((msg) => {
+                  const isCoordinator = msg.sender === 'coordinator' || msg.senderRole === 'coordinator';
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`flex flex-col ${isCoordinator ? 'items-end' : 'items-start'}`}
+                    >
+                      <div className="flex items-center gap-1.5 mb-1 text-[10px] text-slate-400">
+                        <span className="font-semibold text-slate-600 dark:text-slate-300">{msg.senderName}</span>
+                        <span>·</span>
+                        <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        {isCoordinator && (
+                          <span className="text-emerald-500 text-[9px] font-bold">
+                            {msg.read ? '· Read' : '· Sent'}
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-xs leading-relaxed ${
+                          isCoordinator
+                            ? 'bg-emerald-600 text-white rounded-br-none shadow-sm'
+                            : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-bl-none border border-slate-200 dark:border-white/10 shadow-sm'
+                        }`}
+                      >
+                        {msg.text || msg.message}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Reply form */}
+            <form onSubmit={handleSendChatReply} className="flex gap-2">
+              <input
+                type="text"
+                value={chatReplyText}
+                onChange={(e) => setChatReplyText(e.target.value)}
+                placeholder={`Type a direct coordinator message to ${candidate.name}...`}
+                className="flex-1 rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-900/80 px-3.5 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={isSendingReply || !chatReplyText.trim()}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-emerald-950/20 disabled:opacity-50"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>{isSendingReply ? 'Sending...' : 'Send'}</span>
+              </button>
+            </form>
           </section>
         </div>
       )}

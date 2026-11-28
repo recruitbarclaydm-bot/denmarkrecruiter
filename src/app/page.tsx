@@ -152,20 +152,41 @@ export default function CandidateLoginPage() {
             </button>
           </form>
 
-          {/* New Applicant Self-Registration Link */}
-          <div className="mt-6 pt-5 border-t border-slate-200 dark:border-slate-800 text-center">
-            <Link
-              href="/register"
-              className="text-xs font-bold text-brand-primary dark:text-emerald-400 hover:text-brand-secondary hover:underline inline-flex items-center gap-1.5 transition-colors"
-            >
-              <span>New Applicant? Register for Visa Portal &rarr;</span>
-            </Link>
+          {/* New Applicant Self-Registration & Status Lookup Links */}
+          <div className="mt-6 pt-5 border-t border-slate-200 dark:border-slate-800 space-y-2.5 text-center">
+            <div>
+              <Link
+                href="/register"
+                className="text-xs font-bold text-brand-primary dark:text-emerald-400 hover:text-brand-secondary hover:underline inline-flex items-center gap-1.5 transition-colors"
+              >
+                <span>New Applicant? Register for Visa Portal &rarr;</span>
+              </Link>
+            </div>
+            <div>
+              <Link
+                href="/track"
+                className="text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 inline-flex items-center gap-1 transition-colors"
+              >
+                <span>🔍 Track Application Status (No Login Required) &rarr;</span>
+              </Link>
+            </div>
           </div>
         </div>
       </main>
 
-      <footer className="py-4 text-center text-xs text-slate-400 dark:text-slate-600 border-t border-slate-200 dark:border-slate-800">
-        &copy; {new Date().getFullYear()} Danish Agency for International Recruitment and Integration (SIRI). All rights reserved.
+      <footer className="py-4 text-center text-xs text-slate-400 dark:text-slate-600 border-t border-slate-200 dark:border-slate-800 space-y-1">
+        <div>
+          <Link href="/track" className="hover:text-slate-600 dark:hover:text-slate-300 underline mr-3">
+            Track Application Status
+          </Link>
+          &middot;
+          <Link href="/register" className="hover:text-slate-600 dark:hover:text-slate-300 underline ml-3">
+            Register New Applicant
+          </Link>
+        </div>
+        <div>
+          &copy; {new Date().getFullYear()} Danish Immigration &amp; Candidate Portal · Private Recruitment Agency Desk.
+        </div>
       </footer>
     </div>
   );

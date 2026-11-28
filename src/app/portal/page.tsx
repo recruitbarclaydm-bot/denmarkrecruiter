@@ -18,6 +18,7 @@ import { DocumentSigningModal } from '@/components/portal/DocumentSigningModal';
 import { SeasonalAgriPortal } from '@/components/portal/SeasonalAgriPortal';
 import { DocPreviewModal } from '@/components/shared/DocPreviewModal';
 import { PrivateDossierSummary } from '@/components/shared/PrivateDossierSummary';
+import { DirectCoordinatorSupportDrawer } from '@/components/portal/DirectCoordinatorSupportDrawer';
 import { generateAndDownloadVfsIcs } from '@/lib/icsGenerator';
 import { generateDocumentPdf } from '@/lib/pdfGenerator';
 import { DocumentRecord } from '@/types';
@@ -38,6 +39,7 @@ import {
   Upload,
   AlertTriangle,
   ShieldCheck,
+  MessageSquare,
 } from 'lucide-react';
 
 export default function CandidatePortalPage() {
@@ -53,6 +55,7 @@ export default function CandidatePortalPage() {
   const [docForSigning, setDocForSigning] = useState<DocumentRecord | null>(null);
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
   const [onboardingCandidateId, setOnboardingCandidateId] = useState('');
+  const [isSupportChatOpen, setIsSupportChatOpen] = useState(false);
 
   // Re-upload state
   const [targetReuploadDocId, setTargetReuploadDocId] = useState<string | null>(null);
@@ -351,6 +354,16 @@ export default function CandidatePortalPage() {
                 className="px-3.5 py-2 text-xs font-bold rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white shadow-sm flex items-center gap-1.5 transition-colors shrink-0"
               >
                 <span>✏️ Edit KYC &amp; Documents</span>
+              </button>
+              <button
+                onClick={() => setIsSupportChatOpen(true)}
+                className="px-3.5 py-2 text-xs font-bold rounded-lg border border-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 shadow-sm flex items-center gap-1.5 transition-colors shrink-0"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>💬 Coordinator Support</span>
+                {candidate.processMeta?.messages?.filter((m) => m.sender === 'coordinator' && !m.read).length ? (
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                ) : null}
               </button>
 
               {/* Quick Passport & Copy Box */}
@@ -667,6 +680,26 @@ export default function CandidatePortalPage() {
         isOpen={!!activeDocForPreview}
         onClose={() => setActiveDocForPreview(null)}
         onOpenSignatureModal={() => setIsSignatureModalOpen(true)}
+      />
+
+      {/* Floating Coordinator Support Action */}
+      <button
+        onClick={() => setIsSupportChatOpen(true)}
+        className="fixed bottom-6 right-6 z-40 rounded-full bg-emerald-700 hover:bg-emerald-800 text-white p-3.5 shadow-xl flex items-center gap-2.5 transition-all hover:scale-105"
+        title="Direct Coordinator Support"
+      >
+        <MessageSquare className="w-5 h-5" />
+        <span className="text-xs font-bold hidden sm:inline">💬 Coordinator Support</span>
+        {candidate.processMeta?.messages?.filter((m) => m.sender === 'coordinator' && !m.read).length ? (
+          <span className="w-2.5 h-2.5 rounded-full bg-red-400 border-2 border-emerald-700 animate-pulse" />
+        ) : null}
+      </button>
+
+      {/* Direct Coordinator Support Drawer */}
+      <DirectCoordinatorSupportDrawer
+        candidate={candidate}
+        isOpen={isSupportChatOpen}
+        onClose={() => setIsSupportChatOpen(false)}
       />
     </div>
   );

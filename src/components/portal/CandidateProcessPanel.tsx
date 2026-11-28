@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { CandidateRecord } from '@/types';
+import React, { useState, useEffect } from 'react';
+import { CandidateRecord, InterviewPreparationChecklist } from '@/types';
 import { usePortalStore } from '@/context/PortalStoreContext';
 import { useToast } from '@/context/ToastContext';
 import { DocPreviewModal } from '@/components/shared/DocPreviewModal';
@@ -18,10 +18,29 @@ import {
   ShieldCheck,
   AlertTriangle,
   CreditCard,
+  CheckSquare,
+  Square,
+  Sparkles,
 } from 'lucide-react';
 
+const formatCountdown = (isoDate: string): string => {
+  const target = new Date(isoDate).getTime();
+  const now = Date.now();
+  const diffMs = target - now;
+  if (diffMs <= 0) return 'In progress / Concluded';
+  const totalMinutes = Math.floor(diffMs / (1000 * 60));
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days === 0) {
+    return hours === 0 ? `Starts in ${minutes}m` : `Today · Starts in ${hours}h ${minutes}m`;
+  }
+  return `Starts in ${days}d ${hours}h ${minutes}m`;
+};
+
 export const CandidateProcessPanel: React.FC<{ candidate: CandidateRecord }> = ({ candidate }) => {
-  const { submitServiceFeeReceipt } = usePortalStore();
+  const { submitServiceFeeReceipt, savePrepChecklist } = usePortalStore();
   const { showToast } = useToast();
   const [amount, setAmount] = useState('€45');
   const [method, setMethod] = useState('eSewa');
@@ -32,6 +51,48 @@ export const CandidateProcessPanel: React.FC<{ candidate: CandidateRecord }> = (
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isReceiptPreviewOpen, setIsReceiptPreviewOpen] = useState(false);
   const [isPrintSlipOpen, setIsPrintSlipOpen] = useState(false);
+  const [nowTick, setNowTick] = useState(Date.now());
+
+  const [prepChecklist, setPrepChecklist] = useState<InterviewPreparationChecklist>(() => ({
+    passportAndCitizenshipReady: Boolean(candidate.processMeta?.prepChecklist?.passportAndCitizenshipReady),
+    dossierSummaryPrinted: Boolean(candidate.processMeta?.prepChecklist?.dossierSummaryPrinted),
+    quietRoomAndTechTested: Boolean(candidate.processMeta?.prepChecklist?.quietRoomAndTechTested),
+  }));
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowTick(Date.now()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (candidate.processMeta?.prepChecklist) {
+      setPrepChecklist({
+        passportAndCitizenshipReady: Boolean(candidate.processMeta.prepChecklist.passportAndCitizenshipReady),
+        dossierSummaryPrinted: Boolean(candidate.processMeta.prepChecklist.dossierSummaryPrinted),
+        quietRoomAndTechTested: Boolean(candidate.processMeta.prepChecklist.quietRoomAndTechTested),
+      });
+    }
+  }, [candidate.id, candidate.processMeta?.prepChecklist]);
+
+  const handleTogglePrep = async (key: keyof InterviewPreparationChecklist) => {
+    const updated = {
+      ...prepChecklist,
+      [key]: !prepChecklist[key],
+    };
+    setPrepChecklist(updated);
+    try {
+      await savePrepChecklist(candidate.id, updated);
+      showToast('Readiness checklist updated.', 'success');
+    } catch {
+      // Local state updated
+    }
+  };
+
+  const prepItemsCompleted = [
+    prepChecklist.passportAndCitizenshipReady,
+    prepChecklist.dossierSummaryPrinted,
+    prepChecklist.quietRoomAndTechTested,
+  ].filter(Boolean).length;
 
   const receipt = candidate.documents.find((document) => document.category === 'subscription_receipt');
   const feeStatus = candidate.actionRequired?.subscription || candidate.denbarAccount?.status || '€45 Pending';
@@ -83,14 +144,20 @@ export const CandidateProcessPanel: React.FC<{ candidate: CandidateRecord }> = (
           {/* Stage 4 Live Zoom Facial Card */}
           {interview && (
             <div className="rounded-2xl border-2 border-blue-400/60 bg-gradient-to-br from-blue-50 to-indigo-50/40 dark:from-blue-950/40 dark:to-indigo-950/20 p-5 shadow-sm space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-900 dark:text-blue-200">
                   <Video className="h-4 w-4 text-blue-600" />
                   <span>Stage 4 Live Zoom Facial Verification</span>
                 </div>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-200 text-blue-900 dark:bg-blue-900 dark:text-blue-100 animate-pulse">
-                  Scheduled
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-100 text-blue-900 dark:bg-blue-900/60 dark:text-blue-100 border border-blue-300 dark:border-blue-700 flex items-center gap-1">
+                    <Clock3 className="w-3 h-3 text-blue-600" />
+                    <span>{formatCountdown(interview.scheduledAt)}</span>
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-200 text-blue-900 dark:bg-blue-900 dark:text-blue-100 animate-pulse">
+                    Scheduled
+                  </span>
+                </div>
               </div>
 
               <div className="p-3 bg-white/80 dark:bg-slate-900/80 rounded-xl border border-blue-100 dark:border-blue-900 space-y-1">
@@ -118,6 +185,57 @@ export const CandidateProcessPanel: React.FC<{ candidate: CandidateRecord }> = (
                 </p>
               )}
 
+              {/* Interactive Preparation Checklist */}
+              <div className="rounded-xl border border-blue-200 dark:border-blue-800/60 bg-white/90 dark:bg-slate-900/90 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Interview Readiness Checklist</span>
+                  </div>
+                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                    {prepItemsCompleted} / 3 Ready
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 pt-1">
+                  <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={prepChecklist.passportAndCitizenshipReady}
+                      onChange={() => handleTogglePrep('passportAndCitizenshipReady')}
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                    />
+                    <span className={prepChecklist.passportAndCitizenshipReady ? 'line-through text-slate-400' : ''}>
+                      Original Passport &amp; Citizenship in hand
+                    </span>
+                  </label>
+
+                  <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={prepChecklist.dossierSummaryPrinted}
+                      onChange={() => handleTogglePrep('dossierSummaryPrinted')}
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                    />
+                    <span className={prepChecklist.dossierSummaryPrinted ? 'line-through text-slate-400' : ''}>
+                      Printed Appointment / Dossier Summary ready
+                    </span>
+                  </label>
+
+                  <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={prepChecklist.quietRoomAndTechTested}
+                      onChange={() => handleTogglePrep('quietRoomAndTechTested')}
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                    />
+                    <span className={prepChecklist.quietRoomAndTechTested ? 'line-through text-slate-400' : ''}>
+                      Camera, microphone &amp; quiet room tested
+                    </span>
+                  </label>
+                </div>
+              </div>
+
               <a
                 href={interview.meetingUrl}
                 target="_blank"
@@ -133,14 +251,20 @@ export const CandidateProcessPanel: React.FC<{ candidate: CandidateRecord }> = (
           {/* Stage 5 Embassy / VFS Biometrics Card */}
           {appointment && (
             <div className="rounded-2xl border-2 border-emerald-400/60 bg-gradient-to-br from-emerald-50 to-teal-50/40 dark:from-emerald-950/40 dark:to-teal-950/20 p-5 shadow-sm space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-900 dark:text-emerald-200">
                   <MapPin className="h-4 w-4 text-emerald-600" />
                   <span>Stage 5 Embassy / VFS Biometrics Appointment</span>
                 </div>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-200 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100">
-                  Confirmed
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-900 dark:bg-emerald-900/60 dark:text-emerald-100 border border-emerald-300 dark:border-emerald-700 flex items-center gap-1">
+                    <Clock3 className="w-3 h-3 text-emerald-600" />
+                    <span>{formatCountdown(appointment.scheduledAt)}</span>
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-200 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100">
+                    Confirmed
+                  </span>
+                </div>
               </div>
 
               <div className="p-3 bg-white/80 dark:bg-slate-900/80 rounded-xl border border-emerald-100 dark:border-emerald-900 space-y-1">
@@ -167,6 +291,45 @@ export const CandidateProcessPanel: React.FC<{ candidate: CandidateRecord }> = (
                   <strong>Mandatory Checklist:</strong> {appointment.documentNotes}
                 </p>
               )}
+
+              {/* VFS / Biometrics Interactive Checklist */}
+              <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-white/90 dark:bg-slate-900/90 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Appointment Readiness Checklist</span>
+                  </div>
+                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                    {prepChecklist.passportAndCitizenshipReady && prepChecklist.dossierSummaryPrinted ? 'Ready (2/2)' : 'Action Required'}
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 pt-1">
+                  <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={prepChecklist.passportAndCitizenshipReady}
+                      onChange={() => handleTogglePrep('passportAndCitizenshipReady')}
+                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
+                    />
+                    <span className={prepChecklist.passportAndCitizenshipReady ? 'line-through text-slate-400' : ''}>
+                      Original Passport &amp; Citizenship in hand
+                    </span>
+                  </label>
+
+                  <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={prepChecklist.dossierSummaryPrinted}
+                      onChange={() => handleTogglePrep('dossierSummaryPrinted')}
+                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
+                    />
+                    <span className={prepChecklist.dossierSummaryPrinted ? 'line-through text-slate-400' : ''}>
+                      Printed Appointment / Dossier Summary ready
+                    </span>
+                  </label>
+                </div>
+              </div>
 
               <button
                 type="button"

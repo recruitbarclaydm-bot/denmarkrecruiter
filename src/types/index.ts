@@ -78,6 +78,7 @@ export interface ServiceFeeTransaction {
   transactionId: string;
   paymentDate: string;
   remarks: string;
+  submittedAt?: string;
 }
 
 export interface VideoInterviewSchedule {
@@ -96,12 +97,46 @@ export interface ApplicationCenterSchedule {
   documentNotes: string;
 }
 
+export interface DirectCoordinatorMessage {
+  id: string;
+  sender: 'candidate' | 'coordinator';
+  senderRole?: 'candidate' | 'coordinator';
+  senderName: string;
+  message: string;
+  text?: string;
+  timestamp: string;
+  read: boolean;
+}
+
+export interface CandidateEvaluationScorecard {
+  communicationRating: number; // 1-5
+  experienceRating: number; // 1-5
+  documentAuthenticityRating: number; // 1-5
+  employerReadinessRating: number; // 1-5
+  overallReadinessRating?: number; // 1-5
+  totalScore?: number;
+  recommendation?: string;
+  notes?: string;
+  evaluatorNotes?: string;
+  evaluatedAt?: string;
+  evaluatedBy?: string;
+}
+
+export interface InterviewPreparationChecklist {
+  passportAndCitizenshipReady: boolean;
+  dossierSummaryPrinted: boolean;
+  quietRoomAndTechTested: boolean;
+}
+
 export interface CandidateProcessMetadata {
   serviceFeeTransaction?: ServiceFeeTransaction;
   videoInterview?: VideoInterviewSchedule;
   applicationCenter?: ApplicationCenterSchedule;
   coordinatorNotes?: string;
   priority?: 'Normal' | 'High Priority' | 'Ready' | 'On Hold';
+  evaluation?: CandidateEvaluationScorecard;
+  messages?: DirectCoordinatorMessage[];
+  prepChecklist?: InterviewPreparationChecklist;
 }
 
 export interface AdminCrmMetadata {
@@ -214,6 +249,8 @@ export interface CandidateRecord {
   auditLog: AuditLogEntry[];
   notifications: NotificationItem[];
   workExperienceSummary?: string;
+  createdAt?: string;
+  submittedAt?: string;
 }
 
 export interface User {

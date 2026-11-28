@@ -16,7 +16,11 @@ import {
   VideoInterviewSchedule,
   ApplicationCenterSchedule,
   AdminCrmMetadata,
+  DirectCoordinatorMessage,
+  CandidateEvaluationScorecard,
+  InterviewPreparationChecklist,
 } from '@/types';
+import { compressImageFile } from '@/utils/imageCompression';
 import { INITIAL_CANDIDATES } from '@/data/mockUsers';
 import { createEphemeralSupabaseClient, getSignedDocumentUrl, supabase } from '@/lib/supabase';
 
@@ -28,6 +32,11 @@ interface PortalStoreContextType {
   adminCrmMetadata: Record<string, AdminCrmMetadata>;
   saveAdminCrmMetadata: (candidateId: string, metadata: AdminCrmMetadata) => Promise<void>;
   refreshStore: () => Promise<void>;
+  sendDirectMessage: (candidateId: string, messageText: string, sender: 'candidate' | 'coordinator', senderName?: string) => Promise<void>;
+  markMessagesAsRead: (candidateId: string, reader: 'candidate' | 'coordinator') => Promise<void>;
+  saveCandidateEvaluation: (candidateId: string, evaluation: CandidateEvaluationScorecard, evaluatorName?: string) => Promise<void>;
+  savePrepChecklist: (candidateId: string, checklist: InterviewPreparationChecklist) => Promise<void>;
+  bulkSendNotification: (candidateIds: string[], title: string, message: string, actor?: string) => Promise<void>;
   submitServiceFeeReceipt: (candidateId: string, file: File, transaction: ServiceFeeTransaction) => Promise<void>;
   reviewServiceFeeReceipt: (candidateId: string, approved: boolean, reason?: string, actor?: string) => Promise<void>;
   updateCandidateAgencyDetails: (candidateId: string, details: { balance?: string; status?: string; sponsorCode?: string; caseOrderId?: string; employerName?: string }, actor?: string) => Promise<void>;
@@ -521,12 +530,14 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       throw new Error('Choose a JPG, PNG, or WEBP image.');
     }
-    if (file.size > 5 * 1024 * 1024) throw new Error('Profile photo must be 5MB or smaller.');
+    if (file.size > 10 * 1024 * 1024) throw new Error('Profile photo must be 10MB or smaller.');
 
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const compression = await compressImageFile(file, { maxWidth: 600, maxHeight: 800, quality: 0.85 });
+    const uploadFile = compression.file;
+    const safeName = uploadFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
     const storagePath = `${candidateId}/avatar_${Date.now()}_${safeName}`;
-    const { error: uploadError } = await supabase.storage.from('dossier-documents').upload(storagePath, file, {
-      contentType: file.type,
+    const { error: uploadError } = await supabase.storage.from('dossier-documents').upload(storagePath, uploadFile, {
+      contentType: uploadFile.type,
       upsert: false,
     });
     if (uploadError) throw uploadError;
@@ -541,11 +552,12 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
     const candidate = candidatesRef.current.find((item) => item.id === candidateId);
     const actor = candidate?.name || 'Candidate';
+    const auditDetails = `Candidate uploaded / replaced their biometric profile photo.${compression.wasCompressed ? ` (${compression.badgeText})` : ''}`;
     const { error: auditError } = await supabase.from('audit_logs').insert({
       candidate_id: candidateId,
       actor: `${actor} (Applicant)`,
       action: 'Candidate Updated KYC / Profile Photo',
-      details: 'Candidate uploaded / replaced their biometric profile photo.',
+      details: auditDetails,
     });
     if (auditError) throw auditError;
 
@@ -561,7 +573,7 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
             timestamp: new Date().toISOString(),
             actor: `${actor} (Applicant)`,
             action: 'Candidate Updated KYC / Profile Photo',
-            details: 'Candidate uploaded / replaced their biometric profile photo.',
+            details: auditDetails,
           }, ...item.auditLog],
         }
       : item);
@@ -577,15 +589,17 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
     file: File,
     existingDocumentId?: string
   ) => {
-    if (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.type)) {
-      throw new Error('Choose a PDF, JPG, or PNG document.');
+    if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      throw new Error('Choose a PDF, JPG, PNG, or WEBP document.');
     }
-    if (file.size > 10 * 1024 * 1024) throw new Error('Document must be 10MB or smaller.');
+    if (file.size > 15 * 1024 * 1024) throw new Error('Document must be 15MB or smaller.');
 
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const compression = await compressImageFile(file, { maxWidth: 1800, maxHeight: 2400, quality: 0.82 });
+    const uploadFile = compression.file;
+    const safeName = uploadFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
     const storagePath = `${candidateId}/${Date.now()}_${safeName}`;
-    const { error: uploadError } = await supabase.storage.from('dossier-documents').upload(storagePath, file, {
-      contentType: file.type,
+    const { error: uploadError } = await supabase.storage.from('dossier-documents').upload(storagePath, uploadFile, {
+      contentType: uploadFile.type,
       upsert: false,
     });
     if (uploadError) throw uploadError;
@@ -625,11 +639,12 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
       throw documentResult.error;
     }
 
+    const auditDetails = `Candidate uploaded / replaced ${name} (${uploadFile.name}) for caseworker review.${compression.wasCompressed ? ` (${compression.badgeText})` : ''}`;
     const { error: auditError } = await supabase.from('audit_logs').insert({
       candidate_id: candidateId,
       actor: `${candidate?.name || 'Candidate'} (Applicant)`,
       action: `Candidate Uploaded / Replaced Document: ${name}`,
-      details: `Candidate uploaded / replaced ${name} (${file.name}) for caseworker review.`,
+      details: auditDetails,
     });
     if (auditError) throw auditError;
     await refreshStore();
@@ -850,6 +865,174 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
       auditLog: [createAuditEntry(actor, 'Portal Notification Sent', `${title}: ${message}`), ...candidate.auditLog],
     };
     await saveToStorage(candidatesRef.current.map((item) => item.id === candidateId ? updated : item), true);
+  };
+
+  const sendDirectMessage = async (
+    candidateId: string,
+    messageText: string,
+    sender: 'candidate' | 'coordinator',
+    senderName?: string
+  ) => {
+    const candidate = candidatesRef.current.find((item) => item.id === candidateId);
+    if (!candidate) throw new Error('Candidate profile is not available.');
+
+    const name = senderName || (sender === 'candidate' ? candidate.name : 'Recruitment Coordinator');
+    const newMessage: DirectCoordinatorMessage = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      sender,
+      senderName: name,
+      message: messageText.trim(),
+      timestamp: new Date().toISOString(),
+      read: false,
+    };
+
+    const existingMessages = candidate.processMeta?.messages || [];
+    const updatedMessages = [...existingMessages, newMessage];
+
+    const processMeta: CandidateProcessMetadata = {
+      ...candidate.processMeta,
+      messages: updatedMessages,
+    };
+
+    const { error: profileError } = await supabase.from('candidates').update({
+      kyc_note: serializeKycNote({ ...candidate, processMeta }),
+    }).eq('id', candidateId);
+    if (profileError) throw profileError;
+
+    if (sender === 'coordinator') {
+      await supabase.from('notifications').insert({
+        candidate_id: candidateId,
+        title: '💬 Coordinator Message: Direct Support',
+        message: messageText.trim(),
+        is_read: false,
+      });
+    }
+
+    await supabase.from('audit_logs').insert({
+      candidate_id: candidateId,
+      actor: `${name} (${sender === 'candidate' ? 'Applicant' : 'Coordinator'})`,
+      action: sender === 'candidate' ? 'Candidate Sent Direct Support Message' : 'Coordinator Sent Direct Message',
+      details: messageText.trim(),
+    });
+
+    await refreshStore();
+  };
+
+  const markMessagesAsRead = async (candidateId: string, reader: 'candidate' | 'coordinator') => {
+    const candidate = candidatesRef.current.find((item) => item.id === candidateId);
+    if (!candidate || !candidate.processMeta?.messages) return;
+
+    const targetSender = reader === 'candidate' ? 'coordinator' : 'candidate';
+    let hasUnread = false;
+    const updatedMessages = candidate.processMeta.messages.map((m) => {
+      if (m.sender === targetSender && !m.read) {
+        hasUnread = true;
+        return { ...m, read: true };
+      }
+      return m;
+    });
+
+    if (!hasUnread) return;
+
+    const processMeta: CandidateProcessMetadata = {
+      ...candidate.processMeta,
+      messages: updatedMessages,
+    };
+
+    await supabase.from('candidates').update({
+      kyc_note: serializeKycNote({ ...candidate, processMeta }),
+    }).eq('id', candidateId);
+
+    await refreshStore();
+  };
+
+  const saveCandidateEvaluation = async (
+    candidateId: string,
+    evaluation: CandidateEvaluationScorecard,
+    evaluatorName = 'Morten Nyborg (Senior Caseworker)'
+  ) => {
+    const candidate = candidatesRef.current.find((item) => item.id === candidateId);
+    if (!candidate) throw new Error('Candidate profile is not available.');
+
+    const fullEvaluation: CandidateEvaluationScorecard = {
+      ...evaluation,
+      evaluatedAt: new Date().toISOString(),
+      evaluatedBy: evaluatorName,
+    };
+
+    const processMeta: CandidateProcessMetadata = {
+      ...candidate.processMeta,
+      evaluation: fullEvaluation,
+    };
+
+    const { error: profileError } = await supabase.from('candidates').update({
+      kyc_note: serializeKycNote({ ...candidate, processMeta }),
+    }).eq('id', candidateId);
+    if (profileError) throw profileError;
+
+    const totalScore =
+      evaluation.communicationRating +
+      evaluation.experienceRating +
+      evaluation.documentAuthenticityRating +
+      evaluation.employerReadinessRating;
+
+    await supabase.from('audit_logs').insert({
+      candidate_id: candidateId,
+      actor: evaluatorName,
+      action: 'Coordinator Evaluation Scorecard Recorded',
+      details: `Scorecard: ${totalScore}/20. Notes: ${evaluation.notes || 'None'}`,
+    });
+
+    await refreshStore();
+  };
+
+  const savePrepChecklist = async (candidateId: string, checklist: InterviewPreparationChecklist) => {
+    const candidate = candidatesRef.current.find((item) => item.id === candidateId);
+    if (!candidate) return;
+
+    const processMeta: CandidateProcessMetadata = {
+      ...candidate.processMeta,
+      prepChecklist: checklist,
+    };
+
+    await supabase.from('candidates').update({
+      kyc_note: serializeKycNote({ ...candidate, processMeta }),
+    }).eq('id', candidateId);
+
+    await refreshStore();
+  };
+
+  const bulkSendNotification = async (
+    candidateIds: string[],
+    title: string,
+    message: string,
+    actor = 'Morten Nyborg (Coordinator)'
+  ) => {
+    if (!candidateIds.length || !title.trim() || !message.trim()) return;
+
+    const notifRows = candidateIds.map((cid) => ({
+      candidate_id: cid,
+      title: title.trim(),
+      message: message.trim(),
+      is_read: false,
+    }));
+
+    const auditRows = candidateIds.map((cid) => ({
+      candidate_id: cid,
+      actor,
+      action: 'Bulk Portal Notice Dispatched',
+      details: `Broadcast: "${title.trim()}": ${message.trim()}`,
+    }));
+
+    const [{ error: notifErr }, { error: auditErr }] = await Promise.all([
+      supabase.from('notifications').insert(notifRows),
+      supabase.from('audit_logs').insert(auditRows),
+    ]);
+
+    if (notifErr) throw notifErr;
+    if (auditErr) throw auditErr;
+
+    await refreshStore();
   };
 
   const saveAdminCrmMetadata = async (candidateId: string, metadata: AdminCrmMetadata) => {
@@ -1777,6 +1960,11 @@ export const PortalStoreProvider: React.FC<{ children: React.ReactNode }> = ({ c
         updateCandidateAgencyDetails,
         updateCandidateProcessMeta,
         sendCandidateNotification,
+        sendDirectMessage,
+        markMessagesAsRead,
+        saveCandidateEvaluation,
+        savePrepChecklist,
+        bulkSendNotification,
         createAgencyDocument,
         uploadCandidateAvatar,
         uploadCoreDocument,

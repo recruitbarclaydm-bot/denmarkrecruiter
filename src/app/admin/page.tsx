@@ -63,6 +63,7 @@ import {
   PauseCircle,
   PlayCircle,
   Package,
+  Star,
   X as CloseIcon,
 } from 'lucide-react';
 
@@ -87,6 +88,7 @@ export default function AdminPage() {
     setCandidateStage,
     refreshStore,
     adminCrmMetadata,
+    bulkSendNotification,
   } = usePortalStore();
   const { t } = useLanguage();
   const { showToast } = useToast();
@@ -139,6 +141,13 @@ export default function AdminPage() {
   const [isPermanentDeleteModalOpen, setIsPermanentDeleteModalOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeletingPermanently, setIsDeletingPermanently] = useState(false);
+
+  // Bulk Operations State
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(new Set());
+  const [isBulkNoticeModalOpen, setIsBulkNoticeModalOpen] = useState(false);
+  const [bulkNoticeTitle, setBulkNoticeTitle] = useState('');
+  const [bulkNoticeMessage, setBulkNoticeMessage] = useState('');
+  const [isDispatchingBulkNotice, setIsDispatchingBulkNotice] = useState(false);
 
   // Admin Guard
   useEffect(() => {
@@ -200,6 +209,155 @@ export default function AdminPage() {
     }
     return true;
   });
+
+  // Smart Passport Validity Alert (<12m or expired)
+  const getPassportValidityAlert = (c: typeof activeCandidate): { type: 'expired' | 'expiring_soon'; text: string; badgeClass: string } | null => {
+    const expiryStr = c.passportExpiry || (c.extendedKyc as any)?.passportExpiry;
+    if (!expiryStr) return null;
+    const expiryDate = new Date(expiryStr);
+    if (isNaN(expiryDate.getTime())) return null;
+    const now = new Date();
+    const diffMs = expiryDate.getTime() - now.getTime();
+    const diffMonths = diffMs / (1000 * 60 * 60 * 24 * 30.44);
+
+    if (diffMs <= 0) {
+      return {
+        type: 'expired',
+        text: '⚠️ Passport Expired',
+        badgeClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800',
+      };
+    } else if (diffMonths < 12) {
+      return {
+        type: 'expiring_soon',
+        text: '⚠️ Passport < 12m',
+        badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800',
+      };
+    }
+    return null;
+  };
+
+  // SLA Warning Alert (>48h pending action)
+  const getSlaWarning = (c: typeof activeCandidate): { text: string; badgeClass: string } | null => {
+    const isPending =
+      c.accountStatus === 'pending_approval' ||
+      c.kycStatus === 'submitted' ||
+      c.documents.some((d) => d.status === 'pending' || d.status === 'signed_pending_review') ||
+      /pending|submitted/i.test(c.actionRequired?.subscription || c.denbarAccount?.status || '');
+
+    if (!isPending) return null;
+
+    const timestamps: number[] = [];
+    if (c.createdAt) {
+      const t = new Date(c.createdAt).getTime();
+      if (!isNaN(t)) timestamps.push(t);
+    }
+    if (c.processMeta?.serviceFeeTransaction?.submittedAt) {
+      const t = new Date(c.processMeta.serviceFeeTransaction.submittedAt).getTime();
+      if (!isNaN(t)) timestamps.push(t);
+    }
+    c.documents.forEach((d) => {
+      if (d.status === 'pending' || d.status === 'signed_pending_review') {
+        if (d.uploadedAt) {
+          const t = new Date(d.uploadedAt).getTime();
+          if (!isNaN(t)) timestamps.push(t);
+        }
+      }
+    });
+
+    const referenceTime = timestamps.length > 0 ? Math.max(...timestamps) : (c.createdAt ? new Date(c.createdAt).getTime() : 0);
+    if (!referenceTime) return null;
+    const ageHours = (Date.now() - referenceTime) / (1000 * 60 * 60);
+
+    if (ageHours >= 48) {
+      return {
+        text: '⏱️ Needs Review',
+        badgeClass: 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300 border border-orange-300 dark:border-orange-800 animate-pulse',
+      };
+    }
+    return null;
+  };
+
+  // Multi-Select Handlers
+  const toggleSelectCandidate = (candidateId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedCandidateIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(candidateId)) {
+        next.delete(candidateId);
+      } else {
+        next.add(candidateId);
+      }
+      return next;
+    });
+  };
+
+  const selectAllFiltered = () => {
+    if (selectedCandidateIds.size === filteredCandidates.length) {
+      setSelectedCandidateIds(new Set());
+    } else {
+      setSelectedCandidateIds(new Set(filteredCandidates.map((c) => c.id)));
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedCandidateIds(new Set());
+  };
+
+  const handleBulkDispatchNotice = async () => {
+    if (!bulkNoticeTitle.trim() || !bulkNoticeMessage.trim()) {
+      showToast('Please enter both notice title and message body.', 'error');
+      return;
+    }
+    if (selectedCandidateIds.size === 0) return;
+    setIsDispatchingBulkNotice(true);
+    try {
+      await bulkSendNotification(
+        Array.from(selectedCandidateIds),
+        bulkNoticeTitle.trim(),
+        bulkNoticeMessage.trim(),
+        user.name || 'Coordinator Desk'
+      );
+      showToast(`Notice successfully dispatched to ${selectedCandidateIds.size} candidates.`, 'success');
+      setIsBulkNoticeModalOpen(false);
+      setBulkNoticeTitle('');
+      setBulkNoticeMessage('');
+      setSelectedCandidateIds(new Set());
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Bulk notice dispatch failed.', 'error');
+    } finally {
+      setIsDispatchingBulkNotice(false);
+    }
+  };
+
+  const handleBulkExportSelectedCsv = () => {
+    const selected = candidates.filter((c) => selectedCandidateIds.has(c.id));
+    if (selected.length === 0) return;
+    const quote = (val: string | number) => `"${String(val).replace(/"/g, '""')}"`;
+    const rows = [
+      ['Name', 'Email', 'Phone', 'Passport Number', 'Scheme', 'Stage', 'Account Status', 'KYC Status', 'Relocation Balance', 'Case Order ID', 'Sponsor Code'],
+      ...selected.map((c) => [
+        c.name,
+        c.email,
+        c.phone || '',
+        c.passportNumber,
+        c.jobTitle,
+        c.currentStage,
+        c.accountStatus,
+        c.kycStatus,
+        c.denbarAccount?.amount || '',
+        c.siriCaseOrder?.caseOrderId || '',
+        c.employer?.sponsorCode || '',
+      ]),
+    ];
+    const csv = rows.map((r) => r.map(quote).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `bulk-candidates-${selected.length}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast(`Exported CSV for ${selected.length} selected candidates.`, 'success');
+  };
 
   // Action Handlers
   const handleApproveAccount = () => {
@@ -876,14 +1034,46 @@ Please log in to complete your KYC declaration and review official documents.`;
                   Approved ({candidates.filter((c) => c.accountStatus === 'approved').length})
                 </button>
               </div>
+
+              {/* Multi-Select Queue Header Toggle */}
+              <div className="flex items-center justify-between text-[11px] pt-1 px-1 text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-white/5">
+                <button
+                  type="button"
+                  onClick={selectAllFiltered}
+                  className="flex items-center gap-1.5 hover:text-slate-800 dark:hover:text-slate-200 font-semibold transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    readOnly
+                    checked={filteredCandidates.length > 0 && selectedCandidateIds.size === filteredCandidates.length}
+                    className="w-3.5 h-3.5 rounded border-slate-300 dark:border-white/20 text-emerald-600 pointer-events-none"
+                  />
+                  <span>Select All ({filteredCandidates.length})</span>
+                </button>
+                {selectedCandidateIds.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={clearSelection}
+                    className="text-xs text-rose-500 hover:text-rose-600 dark:text-rose-400 font-bold"
+                  >
+                    Clear ({selectedCandidateIds.size})
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Candidate Queue Cards List */}
             <div className="space-y-2 max-h-[calc(100vh-210px)] overflow-y-auto pr-1 custom-scrollbar">
               {filteredCandidates.map((c) => {
                 const isSelected = c.id === activeCandidate.id;
+                const isChecked = selectedCandidateIds.has(c.id);
                 const hasPendingSignedDoc = c.documents.some((d) => d.status === 'signed_pending_review');
                 const pri = adminCrmMetadata[c.id]?.priority;
+                const passportAlert = getPassportValidityAlert(c);
+                const slaAlert = getSlaWarning(c);
+                const hasUnreadChat = c.processMeta?.messages?.some(
+                  (m) => (m.sender === 'candidate' || m.senderRole === 'candidate') && !m.read
+                );
 
                 return (
                   <div
@@ -896,7 +1086,14 @@ Please log in to complete your KYC declaration and review official documents.`;
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-2.5">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {}}
+                          onClick={(e) => toggleSelectCandidate(c.id, e)}
+                          className="w-3.5 h-3.5 rounded border-slate-300 dark:border-white/20 text-emerald-600 focus:ring-emerald-500 cursor-pointer shrink-0"
+                        />
                         <div className="h-9 w-9 shrink-0 overflow-hidden rounded-xl border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-slate-800">
                           {c.avatarUrl ? (
                             <img src={c.avatarUrl} alt={`${c.name} avatar`} className="h-full w-full object-cover" />
@@ -949,6 +1146,27 @@ Please log in to complete your KYC declaration and review official documents.`;
                       {pri === 'On Hold' && (
                         <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
                           ⚠️ Hold
+                        </span>
+                      )}
+
+                      {/* Passport Alert Badge */}
+                      {passportAlert && (
+                        <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${passportAlert.badgeClass}`}>
+                          {passportAlert.text}
+                        </span>
+                      )}
+
+                      {/* SLA Alert Badge */}
+                      {slaAlert && (
+                        <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${slaAlert.badgeClass}`}>
+                          {slaAlert.text}
+                        </span>
+                      )}
+
+                      {/* Direct Support Unread Chat Badge */}
+                      {hasUnreadChat && (
+                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-500 text-slate-950 animate-pulse">
+                          💬 Chat
                         </span>
                       )}
 
@@ -1029,6 +1247,53 @@ Please log in to complete your KYC declaration and review official documents.`;
                       <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
                         {activeCandidate.jobTitle}
                       </span>
+
+                      {/* Active Passport Alert */}
+                      {getPassportValidityAlert(activeCandidate) && (
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${getPassportValidityAlert(activeCandidate)!.badgeClass}`}>
+                          {getPassportValidityAlert(activeCandidate)!.text}
+                        </span>
+                      )}
+
+                      {/* Active SLA Alert */}
+                      {getSlaWarning(activeCandidate) && (
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${getSlaWarning(activeCandidate)!.badgeClass}`}>
+                          {getSlaWarning(activeCandidate)!.text}
+                        </span>
+                      )}
+
+                      {/* Active Evaluation Scorecard Pill */}
+                      {activeCandidate.processMeta?.evaluation ? (
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('interviews')}
+                          className="text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30 flex items-center gap-1 hover:bg-amber-500/25 transition-colors"
+                          title="View evaluation in Interviews tab"
+                        >
+                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                          <span>
+                            Score:{' '}
+                            {activeCandidate.processMeta.evaluation.totalScore ??
+                              activeCandidate.processMeta.evaluation.communicationRating +
+                                activeCandidate.processMeta.evaluation.experienceRating +
+                                activeCandidate.processMeta.evaluation.documentAuthenticityRating +
+                                (activeCandidate.processMeta.evaluation.overallReadinessRating ??
+                                  activeCandidate.processMeta.evaluation.employerReadinessRating ??
+                                  0)}
+                            /20
+                          </span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('interviews')}
+                          className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 border border-dashed border-slate-300 dark:border-white/10 hover:border-amber-400 hover:text-amber-500 transition-colors flex items-center gap-1"
+                          title="Score candidate in Interviews tab"
+                        >
+                          <Star className="w-3 h-3" />
+                          <span>Score Candidate</span>
+                        </button>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
@@ -1168,7 +1433,7 @@ Please log in to complete your KYC declaration and review official documents.`;
                 ['overview', 'Overview & KYC', activeCandidate.kycStatus === 'submitted' || activeCandidate.accountStatus === 'pending_approval'],
                 ['documents', 'Documents & Vault', activeCandidate.documents.filter((d) => d.status === 'pending' || d.status === 'signed_pending_review').length],
                 ['financial', 'Payments & Financial', /pending|submitted|review/i.test(activeCandidate.actionRequired?.subscription || activeCandidate.denbarAccount?.status || '')],
-                ['interviews', 'Interviews & Notices', false],
+                ['interviews', 'Interviews & Notices', activeCandidate.processMeta?.messages?.filter((m) => (m.sender === 'candidate' || m.senderRole === 'candidate') && !m.read).length || false],
                 ['audit', 'Audit Log & Account', false],
               ] as [AdminTab, string, boolean | number][]).map(([tabKey, tabTitle, badge]) => {
                 const isCurrent = activeTab === tabKey;
@@ -2278,6 +2543,115 @@ Please log in to complete your KYC declaration and review official documents.`;
                     <span>Confirm Permanent Deletion</span>
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Multi-Select Bulk Actions Bar */}
+      {selectedCandidateIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 dark:bg-slate-800/95 text-white backdrop-blur-md px-5 py-3 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-4 text-xs animate-fade-in">
+          <div className="flex items-center gap-2 pr-3 border-r border-white/10">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <span className="font-bold">
+              {selectedCandidateIds.size} Candidate{selectedCandidateIds.size > 1 ? 's' : ''} Selected
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsBulkNoticeModalOpen(true)}
+            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5 shadow-md shadow-emerald-950/20 transition-all"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>Bulk Dispatch Notice</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleBulkExportSelectedCsv}
+            className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold flex items-center gap-1.5 transition-all border border-white/10"
+          >
+            <DownloadCloud className="w-3.5 h-3.5" />
+            <span>Export Selected CSV</span>
+          </button>
+          <button
+            type="button"
+            onClick={clearSelection}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            title="Clear Selection"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Bulk Notification Dispatch Modal */}
+      {isBulkNoticeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/10 p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/[0.08] pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Send className="w-4 h-4 text-emerald-500" />
+                  <span>Bulk Notification Dispatch</span>
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Sending notification to {selectedCandidateIds.size} selected candidate{selectedCandidateIds.size > 1 ? 's' : ''}.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBulkNoticeModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                  Notice Title *
+                </label>
+                <input
+                  type="text"
+                  value={bulkNoticeTitle}
+                  onChange={(e) => setBulkNoticeTitle(e.target.value)}
+                  placeholder="e.g. Schedule Update / Stage Notice"
+                  className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
+                  Message Body *
+                </label>
+                <textarea
+                  rows={4}
+                  value={bulkNoticeMessage}
+                  onChange={(e) => setBulkNoticeMessage(e.target.value)}
+                  placeholder="Write the message that will appear in each applicant's candidate portal..."
+                  className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-800 px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-white/5">
+              <button
+                type="button"
+                onClick={() => setIsBulkNoticeModalOpen(false)}
+                className="px-3.5 py-2 text-xs font-semibold rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDispatchingBulkNotice || !bulkNoticeTitle.trim() || !bulkNoticeMessage.trim()}
+                onClick={handleBulkDispatchNotice}
+                className="px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-md disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>{isDispatchingBulkNotice ? 'Dispatching...' : `Dispatch to ${selectedCandidateIds.size}`}</span>
               </button>
             </div>
           </div>
